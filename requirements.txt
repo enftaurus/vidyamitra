@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+langchain
+langchain-core
+langchain-experimental
+langchain-google-genai
+langgraph
+google-generativeai
+requests
+bcrypt
+supabase
+python-dotenv
+pydantic
+langchain-google-genai
+email-validator
