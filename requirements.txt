@@ -13,3 +13,5 @@ python-dotenv
 pydantic
 langchain-google-genai
 email-validator
+python-multipart
+langchain-community
