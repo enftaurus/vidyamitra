@@ -161,6 +161,7 @@ def upload_resume(request:Request,file: UploadFile = File(...)):
                 ai_analysis[k]=json_response[k]
         end_time=time.time()
         latency=end_time-start_time
+        #print(json_response)
         return {"message": "Resume uploaded and processed successfully", "data": ai_analysis, "processing_time": latency}
     except Exception as e:
         return {"error": str(e)}

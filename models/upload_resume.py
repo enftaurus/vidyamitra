@@ -56,6 +56,7 @@ class resume_upload(BaseModel):
         default=None,
         description="The list of skills"
     )
+    education: Optional[list[education_info]] = Field(..., description="The list of education details") 
     analysis:str=Field(..., description="give the analyis of the resume if you were an interviewer how would you feel and what must be improved")
     resume_score:int=Field(..., description="give a score out of 100 to the resume based on the quality of the resume and how well it is structured and how well it is written and how well it is formatted and how well it is organized and how well it is presented and how well it is tailored to the job description and how well it is optimized for ATS and how well it is optimized for human readers")
     domain:str=Field(..., description="give the domain of the resume based on the skills and experience mentioned in the resume")
