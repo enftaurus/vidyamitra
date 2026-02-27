@@ -3,7 +3,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from dotenv import load_dotenv
 import os
-load_dotenv()
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MOVED_BACKEND_DIR = os.path.join(BASE_DIR, "backend server")
+
+if os.path.isdir(MOVED_BACKEND_DIR) and MOVED_BACKEND_DIR not in sys.path:
+    sys.path.insert(0, MOVED_BACKEND_DIR)
+
+env_path = os.path.join(MOVED_BACKEND_DIR, ".env")
+if os.path.exists(env_path):
+    load_dotenv(env_path)
+else:
+    load_dotenv()
+
 from services.db_client import supabase
 #from services.redis import redis_client
 
