@@ -65,10 +65,35 @@ export default function CodingRoundPage() {
   const [isFullscreen, setIsFullscreen] = useState(Boolean(document.fullscreenElement));
   const [showSubmitPrompt, setShowSubmitPrompt] = useState(false);
   const [showViolationPrompt, setShowViolationPrompt] = useState(false);
+  const [faceCount, setFaceCount] = useState(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [proctorWarnings, setProctorWarnings] = useState(0);
   const editorRef = useRef(null);
   const tabSwitchCountRef = useRef(0);
   const handlingViolationRef = useRef(false);
   const lastViolationAtRef = useRef(0);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const faceIntervalRef = useRef(null);
+  const forcingResetRef = useRef(false);
+  const proctorViolationCountRef = useRef(0);
+  const MAX_PROCTOR_WARNINGS = 5;
+
+  const forceResetAllRounds = async (message) => {
+    if (forcingResetRef.current) return;
+    forcingResetRef.current = true;
+
+    try {
+      await api.post('/interview_flow/reset');
+    } catch {
+      // continue to navigate even if API call fails
+    } finally {
+      setError(message);
+      navigate('/interview');
+    }
+  };
 
   useEffect(() => {
     const readTheme = () => {
@@ -208,6 +233,104 @@ export default function CodingRoundPage() {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [code, language, timeTaken, hasSubmitted, navigate, isFullscreen, question, submitting]);
+
+  useEffect(() => {
+    if (!isFullscreen || blockedRoute || !question || hasSubmitted || submitting) return undefined;
+
+    let cancelled = false;
+
+    const startFaceMonitoring = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError('Webcam is not supported in this browser.');
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+
+        setCameraReady(true);
+        setCameraError('');
+
+        const checkFaces = async () => {
+          if (cancelled || forcingResetRef.current) return;
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (!video || !canvas || video.readyState < 2) return;
+
+          try {
+            canvas.width = 320;
+            canvas.height = 240;
+            const context = canvas.getContext('2d');
+            if (!context) return;
+
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const image = canvas.toDataURL('image/jpeg', 0.65);
+
+            const { data } = await api.post('/proctoring/face-check', { image });
+            const count = Number(data?.face_count ?? 0);
+            const status = String(data?.status || 'single_face');
+            setFaceCount(count);
+
+            const isInvalid = status === 'no_face' || status === 'multiple_faces' || count !== 1;
+            if (!isInvalid) return;
+
+            proctorViolationCountRef.current += 1;
+            const warningNo = proctorViolationCountRef.current;
+            setProctorWarnings(warningNo);
+
+            if (warningNo >= MAX_PROCTOR_WARNINGS) {
+              await forceResetAllRounds('Proctoring rule violated 5 times (no face/multiple faces). Interview terminated and all rounds reset.');
+              return;
+            }
+
+            const reason = status === 'multiple_faces' ? 'Multiple faces detected' : 'No face detected';
+            setError(`Warning ${warningNo}/${MAX_PROCTOR_WARNINGS}: ${reason}. Keep exactly one face visible.`);
+          } catch {
+            // Ignore transient detector errors.
+          }
+        };
+
+        await checkFaces();
+        faceIntervalRef.current = window.setInterval(checkFaces, 1800);
+      } catch {
+        setCameraError('Unable to access webcam. Please allow camera permission.');
+      }
+    };
+
+    startFaceMonitoring();
+
+    return () => {
+      cancelled = true;
+
+      if (faceIntervalRef.current) {
+        window.clearInterval(faceIntervalRef.current);
+        faceIntervalRef.current = null;
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+
+      setCameraReady(false);
+      setFaceCount(null);
+    };
+  }, [isFullscreen, blockedRoute, question, hasSubmitted, submitting]);
 
   const enterFullscreen = async () => {
     if (document.fullscreenElement) return;
@@ -431,6 +554,8 @@ export default function CodingRoundPage() {
 
   return (
     <section className="panel">
+      <video ref={videoRef} autoPlay muted playsInline style={{ display: 'none' }} />
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="panel-header between">
         <div>
           <h2>Coding Round</h2>
@@ -441,6 +566,18 @@ export default function CodingRoundPage() {
             {loadingQuestion ? 'Loading...' : 'New Question'}
           </button>
         </div>
+      </div>
+
+      <div className="hint" style={{ marginBottom: '0.65rem' }}>
+        <strong>Webcam Proctoring:</strong>{' '}
+        {cameraError
+          ? cameraError
+          : cameraReady
+            ? `Active${typeof faceCount === 'number' ? ` • Faces detected: ${faceCount}` : ''}`
+            : 'Starting camera...'}
+      </div>
+      <div className="hint" style={{ marginBottom: '0.65rem' }}>
+        <strong>Proctoring warnings:</strong> {proctorWarnings}/{MAX_PROCTOR_WARNINGS} used • {Math.max(0, MAX_PROCTOR_WARNINGS - proctorWarnings)} left
       </div>
 
       {showViolationPrompt && (
