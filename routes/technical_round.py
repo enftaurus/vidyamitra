@@ -1,16 +1,76 @@
 from fastapi import APIRouter, Request, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
-from typing import TypedDict, Optional
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from models.technical_round import model_result, InterviewState, final_analysis
+from langchain_core.messages import HumanMessage
+from typing import Any
+from models.technical_round import model_result, InterviewState, final_analysis, interview_answer_request
 from services.db_client import supabase
+from services.redis import redis_client
 import os
+import json
 
 api_key = os.getenv("RESUME_API")
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(model_result)
+_STATE_FALLBACK: dict[str, dict[str, Any]] = {}
+CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
+MAX_QUESTIONS = 10
+MIN_CORE_TOPIC_QUESTIONS = 2
+
+
+def _state_key(user_id: str) -> str:
+    return f"interview_state:{user_id}"
+
+
+def _serialize_state(state: InterviewState) -> str:
+    return json.dumps(jsonable_encoder(state))
+
+
+def _save_state(user_id: str, state: InterviewState, request: Request) -> None:
+    key = _state_key(user_id)
+    request.session["interview_state_key"] = key
+
+    parsed_state = json.loads(_serialize_state(state))
+    _STATE_FALLBACK[key] = parsed_state
+
+    try:
+        redis_client.set(key, json.dumps(parsed_state), ex=7200)
+    except Exception:
+        pass
+
+
+def _load_state(user_id: str, request: Request) -> InterviewState | None:
+    key = _state_key(user_id)
+    try:
+        raw = redis_client.get(key)
+        if raw:
+            return json.loads(raw)
+    except Exception:
+        pass
+
+    fallback_state = _STATE_FALLBACK.get(key)
+    if fallback_state:
+        return fallback_state
+
+    # Backward compatibility: support old session-stored state if present.
+    state = request.session.get("interview_state")
+    if state:
+        return state
+
+    return None
+
+
+def _clear_state(user_id: str, request: Request) -> None:
+    key = _state_key(user_id)
+    _STATE_FALLBACK.pop(key, None)
+    request.session.pop("interview_state_key", None)
+    request.session.pop("interview_state", None)
+    try:
+        redis_client.delete(key)
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────
@@ -21,6 +81,11 @@ def initialisation(state: InterviewState) -> InterviewState:
     return state  # profile is already set before graph invocation
 
 
+def route_turn(state: InterviewState) -> InterviewState:
+    """Routing node to decide whether this invocation has a fresh answer."""
+    return state
+
+
 # ─────────────────────────────────────────────
 # Node: generate next question (or first question)
 # ─────────────────────────────────────────────
@@ -28,6 +93,16 @@ def generate_question(state: InterviewState) -> InterviewState:
     qa = state["questiions_and_answers"]
     candidate_profile = state["candidate_profile"]
     question_number = len(qa) + 1  # next question number
+    core_topic_questions_asked = int(state.get("core_topic_questions_asked", 0))
+
+    if len(qa) >= MAX_QUESTIONS:
+        state["next_question"] = (
+            "Thank you for completing the technical interview. "
+            "We have reached the maximum of 10 questions, so this round is now concluded."
+        )
+        state["action"] = "end_interview"
+        state["should_end"] = True
+        return state
 
     if len(qa) == 0:
         # ── First question ──────────────────────────────────────────────
@@ -73,6 +148,13 @@ Generate:
     else:
         # ── Subsequent questions ────────────────────────────────────────
         question_level = state["action"]
+        remaining_questions = MAX_QUESTIONS - len(qa)
+        remaining_core_needed = max(0, MIN_CORE_TOPIC_QUESTIONS - core_topic_questions_asked)
+        force_core_topic = remaining_core_needed > 0 and (
+            question_number in (3, 6) or remaining_questions <= remaining_core_needed
+        )
+        forced_topic = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)] if force_core_topic else ""
+
         prompt = f"""
 You are a highly strict and critical technical interviewer at a top product-based company.
 You are conducting a structured technical mock interview.
@@ -84,7 +166,8 @@ PREVIOUS QUESTIONS AND ANSWERS:
 {qa}
 ==============================
 Current Difficulty Level: {question_level}
-Current Question Number: {question_number} / 10
+Current Question Number: {question_number} / {MAX_QUESTIONS}
+Core CS Questions Already Asked (CN/DBMS/OOPS): {core_topic_questions_asked}
 ==============================
 Your Responsibilities:
 1. Critically evaluate the candidate's most recent answer.
@@ -109,7 +192,7 @@ action = "end_interview"
 should_end = true
 ==============================
 STOP RULES:
-- If question_number >= 10 → must end interview.
+- If question_number > {MAX_QUESTIONS} → must end interview immediately.
 - Do NOT randomly end interview without performance reason.
 If ending interview:
 - should_end = true
@@ -122,6 +205,9 @@ If continuing:
 - Do NOT give feedback.
 - Do NOT explain reasoning.
 - Do NOT ask multiple questions.
+CORE TOPIC COVERAGE RULE:
+- Across the full interview, at least {MIN_CORE_TOPIC_QUESTIONS} questions must be from CN/DBMS/OOPS.
+- If force_core_topic is true ({force_core_topic}), the next question MUST be on this topic: {forced_topic}.
 ==============================
 Return your response STRICTLY in the structured format of the ModelResult schema.
 Do NOT return markdown.
@@ -129,9 +215,26 @@ Do NOT include commentary.
 Return only structured output.
 """
         response = structured_model.invoke([HumanMessage(content=prompt)])
-        state["next_question"] = response.next_question
+        state["next_question"] = response.next_question or ""
         state["should_end"] = response.should_end
         state["action"] = response.action
+
+        if state["should_end"] and remaining_core_needed > 0 and len(qa) < MAX_QUESTIONS:
+            topic_to_cover = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)]
+            forced_prompt = f"""
+You are a strict technical interviewer.
+Ask exactly one interview question at {question_level} difficulty on {topic_to_cover}.
+Do not give feedback. Do not ask multiple questions. Output only the question text.
+"""
+            forced_response = model.invoke([HumanMessage(content=forced_prompt)])
+            state["next_question"] = forced_response.content
+            state["should_end"] = False
+            state["action"] = "keep_difficulty"
+            state["core_topic_questions_asked"] = core_topic_questions_asked + 1
+            return state
+
+        if force_core_topic and not state["should_end"]:
+            state["core_topic_questions_asked"] = core_topic_questions_asked + 1
 
     return state
 
@@ -201,6 +304,12 @@ def should_end_interview(state: InterviewState) -> str:
     return "continue"
 
 
+def has_current_answer(state: InterviewState) -> str:
+    if state.get("current_answer", "").strip():
+        return "has_answer"
+    return "ask_only"
+
+
 # ─────────────────────────────────────────────
 # Build the LangGraph graph
 # ─────────────────────────────────────────────
@@ -209,13 +318,23 @@ def build_interview_graph() -> StateGraph:
 
     # Add nodes
     graph.add_node("initialise", initialisation)
+    graph.add_node("route_turn", route_turn)
     graph.add_node("generate_question", generate_question)
     graph.add_node("record_answer", record_answer)
     graph.add_node("analyse", analysis_of_interview)
 
     # Edges
     graph.add_edge(START, "initialise")
-    graph.add_edge("initialise", "generate_question")
+    graph.add_edge("initialise", "route_turn")
+
+    graph.add_conditional_edges(
+        "route_turn",
+        has_current_answer,
+        {
+            "has_answer": "record_answer",
+            "ask_only": "generate_question",
+        },
+    )
 
     # After generating a question we wait for an answer (record_answer is
     # called explicitly per-turn; see interview_answer endpoint below).
@@ -253,6 +372,9 @@ async def start_interview(request: Request):
         raise HTTPException(status_code=401, detail="User not logged in")
 
     try:
+        if not api_key:
+            raise HTTPException(status_code=500, detail="RESUME_API is not configured")
+
         response = supabase.rpc(
             "get_full_candidate_profile", {"p_user_id": int(user_id)}
         ).execute()
@@ -269,12 +391,12 @@ async def start_interview(request: Request):
             "action": "keep_difficulty",
             "analysis": None,
             "current_answer": "",
+            "core_topic_questions_asked": 0,
         }
 
         result_state = interview_graph.invoke(initial_state)
 
-        # Persist state for subsequent turns (use session / DB / cache as needed)
-        request.session["interview_state"] = result_state  # requires SessionMiddleware
+        _save_state(user_id, result_state, request)
 
         return JSONResponse(
             {
@@ -284,12 +406,14 @@ async def start_interview(request: Request):
             }
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/answer")
-async def submit_answer(request: Request):
+async def submit_answer(answer_payload: interview_answer_request, request: Request):
     """
     Submit the candidate's answer to the current question.
     Expects JSON body: { "answer": "<candidate answer text>" }
@@ -299,43 +423,53 @@ async def submit_answer(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="User not logged in")
 
-    body = await request.json()
-    answer = body.get("answer", "").strip()
-    if not answer:
-        raise HTTPException(status_code=400, detail="Answer cannot be empty")
+    try:
+        if not api_key:
+            raise HTTPException(status_code=500, detail="RESUME_API is not configured")
 
-    # Restore state from session
-    state: InterviewState = request.session.get("interview_state")
-    if not state:
-        raise HTTPException(
-            status_code=400,
-            detail="No active interview session. Call /interview/start first.",
-        )
+        answer = answer_payload.answer.strip()
+        if not answer:
+            raise HTTPException(status_code=400, detail="Answer cannot be empty")
 
-    # Inject the candidate's answer and continue the graph
-    state["current_answer"] = answer
+        state: InterviewState = _load_state(user_id, request)
+        if not state:
+            raise HTTPException(
+                status_code=400,
+                detail="No active interview session. Call /interview/start first.",
+            )
 
-    # Run record_answer → generate_question (→ analyse if done)
-    result_state = interview_graph.invoke(state, {"starting_node": "record_answer"})
+        # Inject the candidate's answer and continue the graph
+        state["current_answer"] = answer
 
-    # Persist updated state
-    request.session["interview_state"] = result_state
+        # Re-enter from START; graph routes to record_answer when current_answer exists.
+        result_state = interview_graph.invoke(state)
 
-    question_number = len(result_state["questiions_and_answers"]) + 1
+        _save_state(user_id, result_state, request)
 
-    if result_state.get("should_end") or result_state.get("action") == "end_interview":
+        question_number = len(result_state["questiions_and_answers"]) + 1
+
+        if result_state.get("should_end") or result_state.get("action") == "end_interview":
+            _clear_state(user_id, request)
+            return JSONResponse(
+                {
+                    "should_end": True,
+                    "closing_note": result_state.get(
+                        "next_question",
+                        "Thank you for completing the interview.",
+                    ),
+                    "analysis": jsonable_encoder(result_state.get("analysis")),
+                }
+            )
+
         return JSONResponse(
             {
-                "should_end": True,
-                "analysis": result_state.get("analysis"),
+                "question": result_state.get("next_question", ""),
+                "question_number": question_number,
+                "should_end": False,
+                "difficulty": result_state.get("action"),
             }
         )
-
-    return JSONResponse(
-        {
-            "question": result_state["next_question"],
-            "question_number": question_number,
-            "should_end": False,
-            "difficulty": result_state.get("action"),
-        }
-    )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
