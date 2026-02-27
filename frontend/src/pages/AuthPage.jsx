@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, apiError } from '../api';
+import authVisual from '../assets/auth-visual.svg';
+import DynamicHeadline from '../components/DynamicHeadline';
+import MarqueeText from '../components/MarqueeText';
 
 const initialRegister = { name: '', email: '', password: '' };
 const initialLogin = { email: '', password: '' };
@@ -47,76 +50,97 @@ export default function AuthPage() {
   };
 
   return (
-    <section className="panel auth-panel">
-      <div className="panel-header">
-        <h2>Candidate Access</h2>
-      </div>
+    <section className="auth-shell">
+      <article className="auth-visual">
+        <DynamicHeadline
+          prefix="AI Powered"
+          words={['Interview Practice', 'Coding Rounds', 'Communication Prep', 'Proctoring Flow']}
+        />
+        <p>Skill checks, strict flow control, and proctored rounds with clear progress tracking.</p>
+        <MarqueeText
+          items={[
+            'AI Interview Practice',
+            'Coding Challenge',
+            'Technical Round',
+            'Manager Round',
+            'HR Round',
+            'Instant Feedback',
+          ]}
+        />
+        <img src={authVisual} alt="Interview platform overview" />
+      </article>
 
-      <div className="tabs">
-        <button className={mode === 'login' ? 'tab active' : 'tab'} onClick={() => setMode('login')}>
-          Login
-        </button>
-        <button className={mode === 'register' ? 'tab active' : 'tab'} onClick={() => setMode('register')}>
-          Register
-        </button>
-      </div>
+      <article className="panel auth-panel">
+        <div className="panel-header">
+          <h2>Candidate Access</h2>
+        </div>
 
-      {mode === 'login' ? (
-        <form className="form" onSubmit={onLogin}>
-          <label>Email</label>
-          <input
-            type="email"
-            value={loginForm.email}
-            onChange={(e) => setLoginForm((prev) => ({ ...prev, email: e.target.value }))}
-            required
-          />
-
-          <label>Password</label>
-          <input
-            type="password"
-            value={loginForm.password}
-            onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
-            required
-          />
-
-          <button className="btn" type="submit" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+        <div className="tabs">
+          <button className={mode === 'login' ? 'tab active' : 'tab'} onClick={() => setMode('login')}>
+            Login
           </button>
-        </form>
-      ) : (
-        <form className="form" onSubmit={onRegister}>
-          <label>Name</label>
-          <input
-            type="text"
-            value={registerForm.name}
-            onChange={(e) => setRegisterForm((prev) => ({ ...prev, name: e.target.value }))}
-            required
-          />
-
-          <label>Email</label>
-          <input
-            type="email"
-            value={registerForm.email}
-            onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
-            required
-          />
-
-          <label>Password</label>
-          <input
-            type="password"
-            value={registerForm.password}
-            onChange={(e) => setRegisterForm((prev) => ({ ...prev, password: e.target.value }))}
-            required
-          />
-
-          <button className="btn" type="submit" disabled={loading}>
-            {loading ? 'Registering...' : 'Register'}
+          <button className={mode === 'register' ? 'tab active' : 'tab'} onClick={() => setMode('register')}>
+            Register
           </button>
-        </form>
-      )}
+        </div>
 
-      {message && <div className="success-box">{message}</div>}
-      {error && <div className="error-box">{error}</div>}
+        {mode === 'login' ? (
+          <form className="form" onSubmit={onLogin}>
+            <label>Email</label>
+            <input
+              type="email"
+              value={loginForm.email}
+              onChange={(e) => setLoginForm((prev) => ({ ...prev, email: e.target.value }))}
+              required
+            />
+
+            <label>Password</label>
+            <input
+              type="password"
+              value={loginForm.password}
+              onChange={(e) => setLoginForm((prev) => ({ ...prev, password: e.target.value }))}
+              required
+            />
+
+            <button className="btn" type="submit" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
+          </form>
+        ) : (
+          <form className="form" onSubmit={onRegister}>
+            <label>Name</label>
+            <input
+              type="text"
+              value={registerForm.name}
+              onChange={(e) => setRegisterForm((prev) => ({ ...prev, name: e.target.value }))}
+              required
+            />
+
+            <label>Email</label>
+            <input
+              type="email"
+              value={registerForm.email}
+              onChange={(e) => setRegisterForm((prev) => ({ ...prev, email: e.target.value }))}
+              required
+            />
+
+            <label>Password</label>
+            <input
+              type="password"
+              value={registerForm.password}
+              onChange={(e) => setRegisterForm((prev) => ({ ...prev, password: e.target.value }))}
+              required
+            />
+
+            <button className="btn" type="submit" disabled={loading}>
+              {loading ? 'Registering...' : 'Register'}
+            </button>
+          </form>
+        )}
+
+        {message && <div className="success-box">{message}</div>}
+        {error && <div className="error-box">{error}</div>}
+      </article>
     </section>
   );
 }

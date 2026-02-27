@@ -2,12 +2,14 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, apiError } from '../api';
 import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, toUiStatus } from '../interviewFlow';
+import DynamicHeadline from '../components/DynamicHeadline';
+import MarqueeText from '../components/MarqueeText';
 
 const rounds = [
-  { key: 'coding', title: 'Coding Round', duration: '30 min', route: '/interview/coding', description: 'Solve a coding problem in editor' },
-  { key: 'technical', title: 'Technical Round', duration: '20 min', route: '/interview/technical', description: 'Core CS + domain interview' },
-  { key: 'manager', title: 'Manager Round', duration: '15 min', route: '/interview/manager', description: 'Projects and problem-solving focus' },
-  { key: 'hr', title: 'HR Round', duration: '10 min', route: '/interview/hr', description: 'Personality and behavioral assessment' },
+  { key: 'coding', title: 'Coding Round', duration: '30 min', route: '/interview/coding', description: 'Solve a coding problem in editor', icon: '💻' },
+  { key: 'technical', title: 'Technical Round', duration: '20 min', route: '/interview/technical', description: 'Core CS + domain interview', icon: '🧠' },
+  { key: 'manager', title: 'Manager Round', duration: '15 min', route: '/interview/manager', description: 'Projects and problem-solving focus', icon: '📈' },
+  { key: 'hr', title: 'HR Round', duration: '10 min', route: '/interview/hr', description: 'Personality and behavioral assessment', icon: '🤝' },
 ];
 
 export default function InterviewHubPage() {
@@ -64,8 +66,21 @@ export default function InterviewHubPage() {
     <section className="panel">
       <div className="panel-header between">
         <div>
-          <h2>Interview Hub</h2>
+          <DynamicHeadline
+            prefix="AI Powered"
+            words={['Interview Hub', 'Round Progress', 'Practice Engine']}
+          />
           <p className="muted">Complete all rounds for full assessment</p>
+          <MarqueeText
+            items={[
+              'Coding Round',
+              'Technical Round',
+              'Manager Round',
+              'HR Round',
+              'Proctoring Active',
+              'Performance Report',
+            ]}
+          />
           {cycleClosed && (
             <div className="hint" style={{ marginTop: '0.5rem' }}>
               HR round completed. This interview cycle is closed. Start a new cycle from Coding Round.
@@ -85,19 +100,21 @@ export default function InterviewHubPage() {
       </div>
 
       <div className="hub-grid">
-        {rounds.map((round) => {
+        {rounds.map((round, index) => {
           const isDone = status[round.key] === 'completed';
           const isLocked = isRoundLocked(status, round.key);
           return (
-            <article key={round.key} className="hub-card">
-              <div className="between">
-                <h3>{round.title}</h3>
-                <span className="pill">{round.duration}</span>
+            <article key={round.key} className={`hub-card rich ${index % 2 === 0 ? 'layout-main' : 'layout-alt'}`}>
+              <div className="hub-card-head">
+                <div className="status-card-icon" aria-hidden>{round.icon}</div>
+                <div>
+                  <h3>{round.title}</h3>
+                  <span className="pill">{round.duration}</span>
+                </div>
+                <span className={`status-badge ${status[round.key]}`}>{toUiStatus(status[round.key])}</span>
               </div>
               <p className="muted">{round.description}</p>
-              <p>
-                Status: <strong>{toUiStatus(status[round.key])}</strong>
-              </p>
+              <p className="status-card-desc">Attempt policy, sequence lock, and progression are enforced for this round.</p>
               {cycleClosed ? (
                 <button className="btn ghost" disabled>Closed</button>
               ) : isLocked ? (

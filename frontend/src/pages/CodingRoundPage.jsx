@@ -216,9 +216,11 @@ export default function CodingRoundPage() {
       if (handlingViolationRef.current) return;
       handlingViolationRef.current = true;
 
-      await submitCode(true);
-      setError('Second violation detected. Your current code was auto-submitted. Redirecting to next round...');
-      navigate('/interview/technical');
+      try {
+        await forceResetAllRounds('Second tab-switch violation detected. All rounds were reset. Redirecting to Interview Hub...');
+      } finally {
+        handlingViolationRef.current = false;
+      }
     };
 
     const onVisibility = () => {
@@ -582,7 +584,7 @@ export default function CodingRoundPage() {
 
       {showViolationPrompt && (
         <div className="error-box">
-          <strong>Warning:</strong> Tab switching is not allowed during coding round. Next violation will auto-submit your code.
+          <strong>Warning:</strong> Tab switching is not allowed during coding round. Next violation will reset all rounds.
           <div style={{ marginTop: '0.6rem' }}>
             <button className="btn ghost" onClick={() => setShowViolationPrompt(false)}>
               I Understand

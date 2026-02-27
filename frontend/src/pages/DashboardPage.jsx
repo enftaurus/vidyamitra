@@ -4,6 +4,40 @@ import { apiError } from '../api';
 import { fetchInterviewFlowStatus, isRoundLocked, toUiStatus } from '../interviewFlow';
 
 export default function DashboardPage() {
+  const quickCards = [
+    {
+      title: 'Profile',
+      description: 'View structured candidate profile details and personal data snapshot.',
+      cta: 'Open Profile',
+      to: '/profile',
+      icon: '👤',
+      tag: 'Candidate Data',
+    },
+    {
+      title: 'Resume Upload',
+      description: 'Upload or build resume and review extracted insights in one place.',
+      cta: 'Open Resume Upload',
+      to: '/resume-upload',
+      icon: '📄',
+      tag: 'Resume Center',
+    },
+    {
+      title: 'Domain Switch',
+      description: 'Analyze transition paths and identify readiness for target role shifts.',
+      cta: 'Open Domain Switch',
+      to: '/domain-switch',
+      icon: '🔁',
+      tag: 'Career Shift',
+    },
+  ];
+
+  const roundCards = [
+    { key: 'coding', title: 'Coding', to: '/interview/coding', icon: '💻' },
+    { key: 'technical', title: 'Technical', to: '/interview/technical', icon: '🧠' },
+    { key: 'manager', title: 'Manager', to: '/interview/manager', icon: '📈' },
+    { key: 'hr', title: 'HR', to: '/interview/hr', icon: '🤝' },
+  ];
+
   const [roundStatus, setRoundStatus] = useState({
     coding: 'not_started',
     technical: 'not_started',
@@ -33,32 +67,45 @@ export default function DashboardPage() {
       </div>
 
       <div className="status-grid">
-        <div className="status-card">
-          <h4>Profile</h4>
-          <p>View structured candidate profile details.</p>
-          <Link className="btn ghost" to="/profile">Open Profile</Link>
-        </div>
-
-        <div className="status-card">
-          <h4>Resume Upload</h4>
-          <p>Upload resume and view processing output.</p>
-          <Link className="btn ghost" to="/resume-upload">Open Resume Upload</Link>
-        </div>
-
-        <div className="status-card">
-          <h4>Domain Switch</h4>
-          <p>Analyze transition to a target domain.</p>
-          <Link className="btn ghost" to="/domain-switch">Open Domain Switch</Link>
-        </div>
+        {quickCards.map((card, index) => (
+          <article className={`status-card rich ${index % 2 === 1 ? 'layout-alt' : 'layout-main'}`} key={card.title}>
+            <div className="status-card-top">
+              <div className="status-card-icon" aria-hidden>{card.icon}</div>
+              <span className="status-badge neutral">{card.tag}</span>
+            </div>
+            <h4>{card.title}</h4>
+            <p className="status-card-desc">{card.description}</p>
+            <div className="status-card-footer">
+              <Link className="btn ghost" to={card.to}>{card.cta}</Link>
+            </div>
+          </article>
+        ))}
       </div>
 
       <div className="result-card">
         <h3>Interview Round Status</h3>
         <div className="status-grid">
-          <div className="status-card"><h4>Coding</h4><p><strong>{toUiStatus(roundStatus.coding)}</strong></p><Link className="btn ghost" to="/interview/coding">Open</Link></div>
-          <div className="status-card"><h4>Technical</h4><p><strong>{toUiStatus(roundStatus.technical)}</strong></p>{isRoundLocked(roundStatus, 'technical') ? <button className="btn ghost" disabled>Locked</button> : <Link className="btn ghost" to="/interview/technical">Open</Link>}</div>
-          <div className="status-card"><h4>Manager</h4><p><strong>{toUiStatus(roundStatus.manager)}</strong></p>{isRoundLocked(roundStatus, 'manager') ? <button className="btn ghost" disabled>Locked</button> : <Link className="btn ghost" to="/interview/manager">Open</Link>}</div>
-          <div className="status-card"><h4>HR</h4><p><strong>{toUiStatus(roundStatus.hr)}</strong></p>{isRoundLocked(roundStatus, 'hr') ? <button className="btn ghost" disabled>Locked</button> : <Link className="btn ghost" to="/interview/hr">Open</Link>}</div>
+          {roundCards.map((round, index) => {
+            const roundState = roundStatus[round.key];
+            const isLocked = isRoundLocked(roundStatus, round.key);
+            return (
+              <article key={round.key} className={`status-card rich ${index % 2 === 0 ? 'layout-main' : 'layout-alt'}`}>
+                <div className="status-card-top">
+                  <div className="status-card-icon" aria-hidden>{round.icon}</div>
+                  <span className={`status-badge ${roundState}`}>{toUiStatus(roundState)}</span>
+                </div>
+                <h4>{round.title}</h4>
+                <p className="status-card-desc">Round progress and availability based on interview flow rules.</p>
+                <div className="status-card-footer">
+                  {isLocked ? (
+                    <button className="btn ghost" disabled>Locked</button>
+                  ) : (
+                    <Link className="btn ghost" to={round.to}>Open Round</Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </div>
       {error && <div className="error-box">{error}</div>}

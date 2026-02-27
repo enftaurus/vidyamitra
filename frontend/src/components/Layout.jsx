@@ -17,11 +17,11 @@ const links = [
 export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState('light');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('vidyamitra-theme');
-    const initialTheme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+    const initialTheme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'light';
     setTheme(initialTheme);
     document.documentElement.setAttribute('data-theme', initialTheme);
   }, []);
