@@ -3,6 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from services.db_client import supabase
 from services.questions import questions
 from services.redis import redis_client
+from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
 from models.coding_round import solution,analysis
 import random 
 import os
@@ -14,9 +15,13 @@ def get_question(request:Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        ensure_round_start_allowed(str(user_id), "coding")
         question_id = random.choice(list(questions.keys()))
         redis_client.set(f"user:{user_id}:question", question_id)
+        set_round_state(str(user_id), "coding", "in_progress")
         return {"question": questions[question_id]}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 @router.post("/submit_solution")
@@ -25,12 +30,13 @@ def submit_solution(request:Request,solution:solution):
     if not user_id:
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
+        ensure_round_answer_allowed(str(user_id), "coding")
         question_id = redis_client.get(f"user:{user_id}:question")
         if not question_id:
             raise HTTPException(status_code=400, detail="No active question found for the user")
         question_id=int(question_id)
         question=questions.get(question_id)
-        model=ChatGoogleGenerativeAI(model="gemini-2.5-flash",api_key=API_KEY)
+        model=ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite",api_key=API_KEY)
         structured_model=model.with_structured_output(analysis)
         prompt = f"""
 You are a very strict competitive programming interviewer and senior software engineer at a top product-based company.
@@ -80,6 +86,9 @@ Return only structured output.
 """
         response=structured_model.invoke(prompt)
         formatted_response=response.model_dump()
+        set_round_state(str(user_id), "coding", "completed")
         return{"analysis": formatted_response}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

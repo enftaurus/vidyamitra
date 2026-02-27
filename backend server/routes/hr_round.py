@@ -8,11 +8,12 @@ from typing import Any
 from models.hr_round import hr_model_result, HRInterviewState, final_analysis, hr_answer_request
 from services.db_client import supabase
 from services.redis import redis_client
+from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state, reset_flow_state
 import os
 import json
 
 api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(hr_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 MAX_QUESTIONS = 10
@@ -165,7 +166,7 @@ def record_answer(state: HRInterviewState) -> HRInterviewState:
 
 def analysis_of_interview(state: HRInterviewState) -> HRInterviewState:
     analysis_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", temperature=1.0, api_key=api_key
+        model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key
     )
     structured_analysis = analysis_model.with_structured_output(final_analysis)
 
@@ -242,6 +243,8 @@ async def start_interview(request: Request):
         raise HTTPException(status_code=401, detail="User not logged in")
 
     try:
+        ensure_round_start_allowed(str(user_id), "hr")
+
         if not api_key:
             raise HTTPException(status_code=500, detail="RESUME_API is not configured")
 
@@ -263,6 +266,7 @@ async def start_interview(request: Request):
 
         result_state = interview_graph.invoke(initial_state)
         _save_state(user_id, result_state, request)
+        set_round_state(str(user_id), "hr", "in_progress")
 
         return JSONResponse(
             {
@@ -284,6 +288,8 @@ async def submit_answer(answer_payload: hr_answer_request, request: Request):
         raise HTTPException(status_code=401, detail="User not logged in")
 
     try:
+        ensure_round_answer_allowed(str(user_id), "hr")
+
         if not api_key:
             raise HTTPException(status_code=500, detail="RESUME_API is not configured")
 
@@ -306,6 +312,7 @@ async def submit_answer(answer_payload: hr_answer_request, request: Request):
 
         if result_state.get("should_end") or result_state.get("action") == "end_interview":
             _clear_state(user_id, request)
+            reset_flow_state(str(user_id))
             return JSONResponse(
                 {
                     "should_end": True,
@@ -314,6 +321,7 @@ async def submit_answer(answer_payload: hr_answer_request, request: Request):
                         "Thank you for completing the HR round.",
                     ),
                     "analysis": jsonable_encoder(result_state.get("analysis")),
+                    "flow_reset": True,
                 }
             )
 

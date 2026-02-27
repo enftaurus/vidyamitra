@@ -35,7 +35,7 @@ domain_text = "\n".join([f"{k} - {v}" for k, v in DOMAINS.items()])
 ##------------------------------------------------------------------------------------------------------------------
 ##------------------------------------------------------------------------------------------------------------------
 api_key=os.getenv("RESUME_API")
-model=ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, google_api_key=api_key)
+model=ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.1, google_api_key=api_key)
 structured_model=model.with_structured_output(resume_upload)
 prompt = f"""
 You are an expert resume parsing and evaluation system.

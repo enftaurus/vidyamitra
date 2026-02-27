@@ -7,7 +7,7 @@ load_dotenv()
 from services.db_client import supabase
 #from services.redis import redis_client
 
-from routes import login,register,logout,resume_upload,profile,domain_switch,technical_round,manager_round,hr_round,coding_round
+from routes import login,register,logout,resume_upload,profile,domain_switch,technical_round,manager_round,hr_round,coding_round,interview_flow
 
 app=FastAPI()
 allowed_origins = [
@@ -48,6 +48,7 @@ app.include_router(manager_round.router)
 app.include_router(hr_round.router)
 app.include_router(domain_switch.router)
 app.include_router(profile.router)
+app.include_router(interview_flow.router)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the VidyaMitra API!"}

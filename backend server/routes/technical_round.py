@@ -8,11 +8,12 @@ from typing import Any
 from models.technical_round import model_result, InterviewState, final_analysis, interview_answer_request
 from services.db_client import supabase
 from services.redis import redis_client
+from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
 import os
 import json
 
 api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
@@ -262,7 +263,7 @@ def record_answer(state: InterviewState) -> InterviewState:
 # ─────────────────────────────────────────────
 def analysis_of_interview(state: InterviewState) -> InterviewState:
     analysis_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", temperature=1.0, api_key=api_key
+        model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key
     )
     structured_analysis = analysis_model.with_structured_output(final_analysis)
 
@@ -372,6 +373,8 @@ async def start_interview(request: Request):
         raise HTTPException(status_code=401, detail="User not logged in")
 
     try:
+        ensure_round_start_allowed(str(user_id), "technical")
+
         if not api_key:
             raise HTTPException(status_code=500, detail="RESUME_API is not configured")
 
@@ -397,6 +400,7 @@ async def start_interview(request: Request):
         result_state = interview_graph.invoke(initial_state)
 
         _save_state(user_id, result_state, request)
+        set_round_state(str(user_id), "technical", "in_progress")
 
         return JSONResponse(
             {
@@ -424,6 +428,8 @@ async def submit_answer(answer_payload: interview_answer_request, request: Reque
         raise HTTPException(status_code=401, detail="User not logged in")
 
     try:
+        ensure_round_answer_allowed(str(user_id), "technical")
+
         if not api_key:
             raise HTTPException(status_code=500, detail="RESUME_API is not configured")
 
@@ -450,6 +456,7 @@ async def submit_answer(answer_payload: interview_answer_request, request: Reque
 
         if result_state.get("should_end") or result_state.get("action") == "end_interview":
             _clear_state(user_id, request)
+            set_round_state(str(user_id), "technical", "completed")
             return JSONResponse(
                 {
                     "should_end": True,

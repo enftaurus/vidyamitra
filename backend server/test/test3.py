@@ -4,7 +4,7 @@ import google.generativeai as genai
 genai.configure(api_key="AIzaSyCd1ibHRGkRn86DpNEMnr3mH1VoUTCmh7M")
 
 # Load model
-model = genai.GenerativeModel("gemini-2.5-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 # Generate response
 response = model.generate_content("Explain FastAPI in simple terms.")

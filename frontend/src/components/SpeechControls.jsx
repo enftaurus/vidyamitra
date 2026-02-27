@@ -5,13 +5,12 @@ export default function SpeechControls({ onTranscript, language = 'en-US', reset
   const [isSupported, setIsSupported] = useState(true);
   const [lastError, setLastError] = useState('');
   const recognitionRef = useRef(null);
-  const finalTranscriptRef = useRef('');
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setIsSupported(false);
-      return;
+      return undefined;
     }
 
     const recognition = new SpeechRecognition();
@@ -21,16 +20,11 @@ export default function SpeechControls({ onTranscript, language = 'en-US', reset
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      let interim = '';
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        if (event.results[i].isFinal) {
-          finalTranscriptRef.current += ` ${event.results[i][0].transcript}`;
-        } else {
-          interim += ` ${event.results[i][0].transcript}`;
-        }
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i += 1) {
+        transcript += `${event.results[i][0].transcript} `;
       }
-      const combined = `${finalTranscriptRef.current} ${interim}`.trim();
-      onTranscript(combined);
+      onTranscript(transcript.trim());
     };
 
     recognition.onerror = (event) => {
@@ -45,28 +39,23 @@ export default function SpeechControls({ onTranscript, language = 'en-US', reset
     recognitionRef.current = recognition;
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
+      if (recognitionRef.current) recognitionRef.current.stop();
     };
   }, [onTranscript, language]);
 
   useEffect(() => {
-    finalTranscriptRef.current = '';
     setLastError('');
   }, [resetToken]);
 
-  const start = () => {
-    if (!recognitionRef.current) return;
-    finalTranscriptRef.current = '';
+  const start = async () => {
+    if (!recognitionRef.current || isListening) return;
     setLastError('');
     recognitionRef.current.start();
     setIsListening(true);
   };
 
   const stop = () => {
-    if (!recognitionRef.current) return;
-    recognitionRef.current.stop();
+    if (recognitionRef.current) recognitionRef.current.stop();
     setIsListening(false);
   };
 

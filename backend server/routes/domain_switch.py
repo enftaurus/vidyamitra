@@ -8,7 +8,7 @@ import os
 router = APIRouter(prefix="/domain_switch", tags=["domain_switch"])
 
 api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2, api_key=api_key)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2, api_key=api_key)
 
 prompt = PromptTemplate(
     input_variables=["user_info_json", "target_domain"],

@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 
 const links = [
@@ -16,6 +17,21 @@ const links = [
 export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('vidyamitra-theme');
+    const initialTheme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
+    setTheme(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme);
+  }, []);
+
+  const onToggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('vidyamitra-theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
 
   const onLogout = async () => {
     try {
@@ -42,6 +58,9 @@ export default function Layout({ children }) {
             </Link>
           ))}
         </nav>
+        <button className="theme-toggle" onClick={onToggleTheme}>
+          {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
+        </button>
         <button className="btn ghost" onClick={onLogout}>
           Logout
         </button>
