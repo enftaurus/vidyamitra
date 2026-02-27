@@ -1,6 +1,5 @@
-from http.client import HTTPException
-
-from fastapi import APIRouter, File, UploadFile,Request
+from fastapi import APIRouter, File, UploadFile, Request, HTTPException
+from pydantic import BaseModel
 from models.upload_resume import resume_upload
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.document_loaders import PyPDFLoader
@@ -130,6 +129,112 @@ def clean_resume_text(text: str) -> str:
 ##------------------------------------------------------------------------------------------------------------------
 ##------------------------------------------------------------------------------------------------------------------
 router = APIRouter(prefix="/resume", tags=["Resume Upload"])
+
+
+class ManualResumePayload(BaseModel):
+    basic: dict
+    skills: list[str] | None = None
+    education: dict | None = None
+    certificates: list[dict] | None = None
+    projects: list[dict] | None = None
+    placements: list[dict] | None = None
+
+
+@router.post("/build")
+def build_resume(payload: ManualResumePayload, request: Request):
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    details = payload.model_dump()
+
+    skills = [
+        {"skill_name": item.strip()}
+        for item in (details.get("skills") or [])
+        if item and item.strip()
+    ]
+
+    basic = details.get("basic") or {}
+    education = details.get("education") or {}
+    certificates = details.get("certificates") or []
+    projects = details.get("projects") or []
+    placements = details.get("placements") or []
+
+    resume_json = {
+        "basic": basic,
+        "education": education,
+        "certificates": certificates,
+        "projects": projects,
+        "placements": placements,
+        "skills": details.get("skills") or [],
+    }
+
+    normalized_certificates = [
+        {
+            "certificate_name": item.get("certificate_name") or "",
+            "certificate_issuer": item.get("certificate_issuer") or "",
+            "certificate_date": item.get("certificate_date") or None,
+        }
+        for item in certificates
+        if isinstance(item, dict) and any(item.values())
+    ]
+
+    normalized_projects = [
+        {
+            "project_name": item.get("project_name") or "",
+            "project_description": item.get("project_description") or "",
+            "project_link": item.get("project_link") or None,
+        }
+        for item in projects
+        if isinstance(item, dict) and any(item.values())
+    ]
+
+    final_payload = {
+        "candidates": {
+            "phone": basic.get("phone") or "",
+            "bio": basic.get("bio") or "",
+            "resume_json": resume_json,
+            "domain": basic.get("domain") or "General",
+        },
+        "certificates": normalized_certificates or None,
+        "projects": normalized_projects or None,
+        "skills": skills or None,
+        "education": [
+            {
+                "degree": education.get("degree") or "",
+                "field_of_study": education.get("field_of_study") or None,
+                "college_name": education.get("college_name") or "",
+                "university_name": education.get("university_name") or None,
+                "gpa": education.get("gpa") or None,
+                "start_year": education.get("start_year") or None,
+                "end_year": education.get("end_year") or None,
+            }
+        ]
+        if any(education.values())
+        else None,
+        "analysis": "Resume generated from user-provided details.",
+        "resume_score": 0,
+        "domain": basic.get("domain") or "General",
+        "skill_analysis": "Fill additional domain-specific achievements to improve this resume.",
+        "suggested_projects": "Add 2-3 project links and quantified outcomes for better impact.",
+    }
+
+    try:
+        supabase.rpc(
+            "upsert_full_resume",
+            {
+                "p_user_id": user_id,
+                "data": final_payload,
+            },
+        ).execute()
+        return {
+            "message": "Resume details saved successfully",
+            "data": final_payload,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/")
 def upload_resume(request:Request,file: UploadFile = File(...)):
     user_id=request.cookies.get("user_id")
