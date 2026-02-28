@@ -16,7 +16,8 @@ export default function JobsPage() {
       .join(' ')
       .toLowerCase();
 
-    return haystack.includes(normalizedKeyword);
+    const terms = normalizedKeyword.split(',').map((t) => t.trim()).filter(Boolean);
+    return terms.every((term) => haystack.includes(term));
   });
 
   useEffect(() => {

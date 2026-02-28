@@ -10,6 +10,7 @@ const links = [
   { to: '/jobs', label: 'Jobs' },
   { to: '/job-market', label: 'Job Market' },
   { to: '/domain-switch', label: 'Domain Switch' },
+  { to: '/admin', label: 'Admin' },
   { to: '/interview', label: 'Interview Hub' },
   { to: '/interview/coding', label: 'Coding' },
   { to: '/interview/technical', label: 'Technical' },

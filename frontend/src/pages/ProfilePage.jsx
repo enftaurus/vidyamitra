@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, apiError } from '../api';
 
 const firstRecord = (payload) => {
@@ -86,12 +87,15 @@ export default function ProfilePage() {
   const [profileRaw, setProfileRaw] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchParams] = useSearchParams();
+  const userid = searchParams.get('userid');
 
   const loadProfile = async () => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get('/profile');
+      const url = userid ? `/admin/profile/${userid}` : '/profile';
+      const { data } = await api.get(url);
       setProfileRaw(data.data || null);
     } catch (err) {
       setError(apiError(err, 'Unable to load profile'));
@@ -102,7 +106,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     loadProfile();
-  }, []);
+  }, [userid]);
 
   const profile = useMemo(() => {
     const row = firstRecord(profileRaw);
@@ -127,8 +131,8 @@ export default function ProfilePage() {
     <section className="panel">
       <div className="panel-header between">
         <div>
-          <h2>Profile</h2>
-          <p className="muted">Structured candidate profile</p>
+          <h2>{userid ? `Profile — User #${userid}` : 'Profile'}</h2>
+          <p className="muted">{userid ? 'Viewing user profile (admin)' : 'Structured candidate profile'}</p>
         </div>
         <button className="btn ghost" onClick={loadProfile} disabled={loading}>
           {loading ? 'Refreshing...' : 'Refresh'}

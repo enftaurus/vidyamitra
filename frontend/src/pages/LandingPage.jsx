@@ -157,6 +157,9 @@ export default function LandingPage() {
             Start Free AI Mock Interview <span className="arrow">→</span>
           </Link>
           <a className="landing-btn outline" href="#how-it-works">How it works</a>
+          <Link className="landing-btn outline admin-btn" to="/admin">
+            🛡️ Admin Portal
+          </Link>
         </div>
         <div className="landing-badges">
           {badges.map((b) => (
