@@ -18,10 +18,19 @@ import os
 import json
 
 api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(manager_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
-MAX_QUESTIONS = 10
+MAX_QUESTIONS = 3
+
+
+def _single_question_text(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return ""
+    if "?" in cleaned:
+        return f"{cleaned.split('?', 1)[0].strip()}?"
+    return cleaned
 
 
 def _state_key(user_id: str) -> str:
@@ -91,7 +100,7 @@ def generate_question(state: ManagerInterviewState) -> ManagerInterviewState:
 
     if len(qa) >= MAX_QUESTIONS:
         state["next_question"] = (
-            "Thank you for your time. We have completed the manager round with 10 questions, "
+            f"Thank you for your time. We have completed the manager round with {MAX_QUESTIONS} questions, "
             "so this round is now closed."
         )
         state["action"] = "end_interview"
@@ -107,15 +116,17 @@ CANDIDATE PROFILE:
 {candidate_profile}
 
 INSTRUCTIONS:
-1. Greet the candidate briefly and professionally.
-2. Start the manager round.
+0. You have only 3 total questions in this manager round.
+1. Do NOT greet. Do NOT add introduction.
+2. Ask exactly ONE short and basic manager question.
 3. Ask exactly ONE question.
 4. The first question must be project-focused (project ownership, design choices, tradeoffs, impact).
-5. Keep the question practical and managerial, not purely theoretical.
+5. Keep the question practical, basic, and managerial.
 6. Do not provide feedback or hints.
+7. Do NOT repeat any question from a previous round or session.
 """
         response = model.invoke([HumanMessage(content=prompt)])
-        state["next_question"] = response.content
+        state["next_question"] = _single_question_text(response.content)
         state["action"] = "keep_difficulty"
         state["should_end"] = False
     else:
@@ -139,8 +150,11 @@ RULES:
    - project explanation (architecture, decisions, ownership, outcomes, tradeoffs)
    - problem solving (ambiguity handling, constraints, risk, prioritization)
 4. Ask exactly ONE next question if continuing.
-5. End if the interview quality is very poor or if question_number > {MAX_QUESTIONS}.
-6. Never ask more than {MAX_QUESTIONS} questions total.
+5. The next question MUST be completely different from every question listed in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
+6. End if the interview quality is very poor or if question_number > {MAX_QUESTIONS}.
+7. Never ask more than {MAX_QUESTIONS} questions total.
+8. Every asked question must be short and basic.
+9. You only have 3 total questions in this round.
 
 If ending:
 - should_end = true
@@ -150,7 +164,7 @@ If ending:
 Return ONLY structured output matching the schema.
 """
         response = structured_model.invoke([HumanMessage(content=prompt)])
-        state["next_question"] = response.next_question or ""
+        state["next_question"] = _single_question_text(response.next_question or "")
         state["should_end"] = response.should_end
         state["action"] = response.action
 
@@ -169,7 +183,7 @@ def record_answer(state: ManagerInterviewState) -> ManagerInterviewState:
 
 def analysis_of_interview(state: ManagerInterviewState) -> ManagerInterviewState:
     analysis_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key
+        model="gemini-2.5-flash", temperature=1.0, api_key=api_key
     )
     structured_analysis = analysis_model.with_structured_output(final_analysis)
 

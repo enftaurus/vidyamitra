@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, apiError } from '../api';
 import SpeechControls from './SpeechControls';
 import { setRoundStatus } from '../roundStatus';
+import { stopAllAudioPlayback } from '../audioControl';
 
 const nextRoundRouteByKey = {
   technical: '/interview/manager',
@@ -272,6 +273,7 @@ export default function InterviewConsole({ title, basePath, roundKey }) {
 
   useEffect(() => () => {
     clearRevealTimer();
+    stopAllAudioPlayback();
   }, []);
 
   const onStart = async () => {

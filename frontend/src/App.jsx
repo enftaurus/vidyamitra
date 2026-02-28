@@ -8,6 +8,7 @@ import CodingRoundPage from './pages/CodingRoundPage';
 import ProfilePage from './pages/ProfilePage';
 import DomainSwitchPage from './pages/DomainSwitchPage';
 import ResumeUploadPage from './pages/ResumeUploadPage';
+import JobsPage from './pages/JobsPage';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/domain-switch" element={<DomainSwitchPage />} />
         <Route path="/resume-upload" element={<ResumeUploadPage />} />
+        <Route path="/jobs" element={<JobsPage />} />
         <Route path="/interview" element={<InterviewHubPage />} />
         <Route path="/interview/coding" element={<CodingRoundPage />} />
         <Route

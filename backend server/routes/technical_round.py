@@ -13,12 +13,21 @@ import os
 import json
 
 api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key)
+model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
-MAX_QUESTIONS = 10
+MAX_QUESTIONS = 3
 MIN_CORE_TOPIC_QUESTIONS = 2
+
+
+def _single_question_text(text: str) -> str:
+    cleaned = " ".join(str(text or "").split())
+    if not cleaned:
+        return ""
+    if "?" in cleaned:
+        return f"{cleaned.split('?', 1)[0].strip()}?"
+    return cleaned
 
 
 def _state_key(user_id: str) -> str:
@@ -99,14 +108,13 @@ def generate_question(state: InterviewState) -> InterviewState:
     if len(qa) >= MAX_QUESTIONS:
         state["next_question"] = (
             "Thank you for completing the technical interview. "
-            "We have reached the maximum of 10 questions, so this round is now concluded."
+            f"We have reached the maximum of {MAX_QUESTIONS} questions, so this round is now concluded."
         )
         state["action"] = "end_interview"
         state["should_end"] = True
         return state
 
     if len(qa) == 0:
-        # ── First question ──────────────────────────────────────────────
         prompt = f"""
 You are a strict and professional technical interviewer at a top product-based company.
 You are starting a structured technical mock interview.
@@ -117,32 +125,28 @@ CANDIDATE PROFILE:
 {candidate_profile}
 ---------------------------
 INSTRUCTIONS:
-1. Greet the candidate by name (if name is present in the profile).
-2. Clearly state that the technical interview is beginning.
-3. Inform the candidate that you will start from fundamentals .
+0. You have only 3 total questions in this technical round.
+1. Do NOT greet. Do NOT add introduction.
+2. Ask exactly ONE short, basic technical question.
+3. Do NOT repeat any question from a previous round or session.
 4. Carefully analyze the resume and identify:
    - Core programming languages
    - Main technical skills
    - Notable projects
    - Areas of claimed expertise
-5. Start with a basic foundational question related to one of the candidate's claimed skills.
-6. ask system design questions like test the candidate in and out .
-7. Do NOT evaluate or score anything yet.
-8. Ask only ONE question.
-9. Keep tone professional, serious, and interview-like.
-10. Keep the first question at EASY difficulty level.
+4. Start with a basic foundational question related to one of the candidate's claimed skills.
+5. Do NOT evaluate or score anything yet.
+6. Keep tone simple and interview-like.
 Avoid:
 - Giving feedback
 - Giving hints
 - Asking multiple questions
 - Asking unrelated topics not mentioned in the profile
 Generate:
-- A short greeting
-- A short introduction line
-- The first technical question
+- Only one short question text
 """
         response = model.invoke([HumanMessage(content=prompt)])
-        state["next_question"] = response.content
+        state["next_question"] = _single_question_text(response.content)
         state["action"] = "keep_difficulty"
         state["should_end"] = False
 
@@ -183,17 +187,20 @@ Your Responsibilities:
    - End interview
 4. Decide whether the interview should end.
 5. If continuing, generate the next question.
+6. You only have 3 total questions in this round, so manage progression accordingly.
 ==============================
 DIFFICULTY RULES:
 - If answer shows weak understanding → action = "decrease_difficulty"
 - If answer shows moderate understanding → action = "keep_difficulty"
 - If answer shows strong understanding → action = "increase_difficulty"
+Regardless of action, ask only one short, basic interview question.
 If the candidate repeatedly shows poor understanding, you may:
 action = "end_interview"
 should_end = true
 ==============================
 STOP RULES:
 - If question_number > {MAX_QUESTIONS} → must end interview immediately.
+- Never exceed 3 total questions in this round.
 - Do NOT randomly end interview without performance reason.
 If ending interview:
 - should_end = true
@@ -201,8 +208,9 @@ If ending interview:
 - action = "end_interview"
 If continuing:
 - should_end = false
-- Generate exactly ONE next technical question.
-- The question must match the updated difficulty level.
+- Generate exactly ONE short next technical question.
+- The question MUST be different from every question in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
+- Keep it basic and clear.
 - Do NOT give feedback.
 - Do NOT explain reasoning.
 - Do NOT ask multiple questions.
@@ -216,7 +224,7 @@ Do NOT include commentary.
 Return only structured output.
 """
         response = structured_model.invoke([HumanMessage(content=prompt)])
-        state["next_question"] = response.next_question or ""
+        state["next_question"] = _single_question_text(response.next_question or "")
         state["should_end"] = response.should_end
         state["action"] = response.action
 
@@ -224,11 +232,11 @@ Return only structured output.
             topic_to_cover = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)]
             forced_prompt = f"""
 You are a strict technical interviewer.
-Ask exactly one interview question at {question_level} difficulty on {topic_to_cover}.
+Ask exactly one short basic interview question on {topic_to_cover}.
 Do not give feedback. Do not ask multiple questions. Output only the question text.
 """
             forced_response = model.invoke([HumanMessage(content=forced_prompt)])
-            state["next_question"] = forced_response.content
+            state["next_question"] = _single_question_text(forced_response.content)
             state["should_end"] = False
             state["action"] = "keep_difficulty"
             state["core_topic_questions_asked"] = core_topic_questions_asked + 1
@@ -263,7 +271,7 @@ def record_answer(state: InterviewState) -> InterviewState:
 # ─────────────────────────────────────────────
 def analysis_of_interview(state: InterviewState) -> InterviewState:
     analysis_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite", temperature=1.0, api_key=api_key
+        model="gemini-2.5-flash", temperature=1.0, api_key=api_key
     )
     structured_analysis = analysis_model.with_structured_output(final_analysis)
 

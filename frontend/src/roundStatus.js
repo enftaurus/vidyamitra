@@ -22,3 +22,7 @@ export const setRoundStatus = (roundKey, status) => {
   const next = { ...current, [roundKey]: status };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 };
+
+export const clearRoundStatus = () => {
+  localStorage.removeItem(STORAGE_KEY);
+};

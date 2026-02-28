@@ -36,7 +36,7 @@ def submit_solution(request:Request,solution:solution):
             raise HTTPException(status_code=400, detail="No active question found for the user")
         question_id=int(question_id)
         question=questions.get(question_id)
-        model=ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite",api_key=API_KEY)
+        model=ChatGoogleGenerativeAI(model="gemini-2.5-flash",api_key=API_KEY)
         structured_model=model.with_structured_output(analysis)
         prompt = f"""
 You are a very strict competitive programming interviewer and senior software engineer at a top product-based company.

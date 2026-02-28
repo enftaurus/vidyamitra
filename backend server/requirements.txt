@@ -18,4 +18,5 @@ langchain-community
 redis
 itsdangerous
 opencv-python
+mediapipe
 numpy

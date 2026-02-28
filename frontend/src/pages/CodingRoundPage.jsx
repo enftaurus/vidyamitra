@@ -4,6 +4,7 @@ import Editor from '@monaco-editor/react';
 import { api, apiError } from '../api';
 import { setRoundStatus } from '../roundStatus';
 import { fetchInterviewFlowStatus, getNextAllowedRound, ROUND_ROUTES } from '../interviewFlow';
+import { stopAllAudioPlayback } from '../audioControl';
 
 const languageTemplates = {
   python: '# Write your Python solution here\n',
@@ -45,6 +46,13 @@ const monacoLanguageMap = {
   cpp: 'cpp',
 };
 
+const hasValidQuestionShape = (question) => (
+  Boolean(question)
+  && typeof question === 'object'
+  && Object.keys(question).length > 0
+  && typeof question.problem_statement === 'string'
+);
+
 export default function CodingRoundPage() {
   const navigate = useNavigate();
   const [question, setQuestion] = useState(null);
@@ -68,6 +76,8 @@ export default function CodingRoundPage() {
   const [faceCount, setFaceCount] = useState(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState('');
+  const [detectorEngine, setDetectorEngine] = useState('');
+  const [qualityHint, setQualityHint] = useState('');
   const [proctorWarnings, setProctorWarnings] = useState(0);
   const editorRef = useRef(null);
   const tabSwitchCountRef = useRef(0);
@@ -78,18 +88,25 @@ export default function CodingRoundPage() {
   const streamRef = useRef(null);
   const faceIntervalRef = useRef(null);
   const forcingResetRef = useRef(false);
+  const faceCheckInFlightRef = useRef(false);
   const proctorViolationCountRef = useRef(0);
-  const MAX_PROCTOR_WARNINGS = 5;
+  const multiFaceStreakRef = useRef(0);
+  const noFaceStreakRef = useRef(0);
+  const MAX_PROCTOR_WARNINGS = 30;
+  const MULTI_FACE_STREAK_THRESHOLD = 2;
+  const NO_FACE_STREAK_THRESHOLD = 3;
 
   const forceResetAllRounds = async (message) => {
     if (forcingResetRef.current) return;
     forcingResetRef.current = true;
+    stopAllAudioPlayback();
 
     try {
       await api.post('/interview_flow/reset');
     } catch {
       // continue to navigate even if API call fails
     } finally {
+      stopAllAudioPlayback();
       setError(message);
       navigate('/interview');
     }
@@ -168,8 +185,12 @@ export default function CodingRoundPage() {
     setError('');
     try {
       const { data } = await api.get('/coding_round/get_question');
+      const nextQuestion = data?.question;
+      if (!hasValidQuestionShape(nextQuestion)) {
+        throw new Error('Invalid question payload received from server');
+      }
       localStorage.removeItem('interview_cycle_closed');
-      setQuestion(data.question || null);
+      setQuestion(nextQuestion);
       setStartedAt(Date.now());
       setResult(null);
       setHasSubmitted(false);
@@ -237,7 +258,7 @@ export default function CodingRoundPage() {
   }, [code, language, timeTaken, hasSubmitted, navigate, isFullscreen, question, submitting]);
 
   useEffect(() => {
-    if (!isFullscreen || blockedRoute || !question || hasSubmitted || submitting) return undefined;
+    if (!isFullscreen || blockedRoute || hasSubmitted || submitting) return undefined;
 
     let cancelled = false;
 
@@ -269,48 +290,85 @@ export default function CodingRoundPage() {
         setCameraError('');
 
         const checkFaces = async () => {
-          if (cancelled || forcingResetRef.current) return;
+          if (cancelled || forcingResetRef.current || faceCheckInFlightRef.current) return;
           const video = videoRef.current;
           const canvas = canvasRef.current;
           if (!video || !canvas || video.readyState < 2) return;
+          faceCheckInFlightRef.current = true;
 
           try {
-            canvas.width = 320;
-            canvas.height = 240;
+            canvas.width = 480;
+            canvas.height = 360;
             const context = canvas.getContext('2d');
             if (!context) return;
 
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const image = canvas.toDataURL('image/jpeg', 0.65);
+            const image = canvas.toDataURL('image/jpeg', 0.8);
 
             const { data } = await api.post('/proctoring/face-check', { image });
             const count = Number(data?.face_count ?? 0);
             const status = String(data?.status || 'single_face');
+            const engine = String(data?.engine || '');
+            const quality = data?.quality || {};
             setFaceCount(count);
+            setDetectorEngine(engine);
 
-            const isInvalid = status === 'no_face' || status === 'multiple_faces' || count !== 1;
-            if (!isInvalid) return;
+            const qualityWarnings = [];
+            if (quality.low_light) qualityWarnings.push('Low light');
+            if (quality.blurry) qualityWarnings.push('Blurry frame');
+            setQualityHint(qualityWarnings.join(' • '));
+
+            const hasMultipleFaces = status === 'multiple_faces' || count > 1;
+            const hasNoFace = status === 'no_face' || count === 0;
+
+            if (!question) {
+              multiFaceStreakRef.current = 0;
+              return;
+            }
+
+            if (!hasMultipleFaces && !hasNoFace) {
+              multiFaceStreakRef.current = 0;
+              noFaceStreakRef.current = 0;
+              return;
+            }
+
+            let reason = '';
+            if (hasMultipleFaces) {
+              noFaceStreakRef.current = 0;
+              multiFaceStreakRef.current += 1;
+              if (multiFaceStreakRef.current < MULTI_FACE_STREAK_THRESHOLD) return;
+              multiFaceStreakRef.current = 0;
+              reason = 'Multiple faces detected';
+            } else if (hasNoFace) {
+              multiFaceStreakRef.current = 0;
+              noFaceStreakRef.current += 1;
+              if (noFaceStreakRef.current < NO_FACE_STREAK_THRESHOLD) return;
+              noFaceStreakRef.current = 0;
+              reason = 'No face detected';
+            }
 
             proctorViolationCountRef.current += 1;
             const warningNo = proctorViolationCountRef.current;
             setProctorWarnings(warningNo);
 
             if (warningNo >= MAX_PROCTOR_WARNINGS) {
-              await forceResetAllRounds('Proctoring rule violated 5 times (no face/multiple faces). Interview terminated and all rounds reset.');
+              await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (multiple faces). Interview terminated and all rounds reset.`);
               return;
             }
 
-            const reason = status === 'multiple_faces' ? 'Multiple faces detected' : 'No face detected';
             setError(`Warning ${warningNo}/${MAX_PROCTOR_WARNINGS}: ${reason}. Keep exactly one face visible.`);
           } catch {
             // Ignore transient detector errors.
+          } finally {
+            faceCheckInFlightRef.current = false;
           }
         };
 
         await checkFaces();
         faceIntervalRef.current = window.setInterval(checkFaces, 1800);
-      } catch {
-        setCameraError('Unable to access webcam. Please allow camera permission.');
+      } catch (cameraInitError) {
+        const reason = cameraInitError?.name || cameraInitError?.message || 'unknown error';
+        setCameraError(`Unable to access webcam. Please allow camera permission. (${reason})`);
       }
     };
 
@@ -331,6 +389,11 @@ export default function CodingRoundPage() {
 
       setCameraReady(false);
       setFaceCount(null);
+      setDetectorEngine('');
+      setQualityHint('');
+      faceCheckInFlightRef.current = false;
+      multiFaceStreakRef.current = 0;
+      noFaceStreakRef.current = 0;
     };
   }, [isFullscreen, blockedRoute, question, hasSubmitted, submitting]);
 
@@ -556,7 +619,24 @@ export default function CodingRoundPage() {
 
   return (
     <section className="panel">
-      <video ref={videoRef} autoPlay muted playsInline style={{ display: 'none' }} />
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        style={{
+          position: 'fixed',
+          right: '1rem',
+          bottom: '1rem',
+          width: '220px',
+          maxWidth: '32vw',
+          borderRadius: '12px',
+          border: '1px solid #d6dfef',
+          background: '#000',
+          boxShadow: '0 10px 26px rgba(25, 34, 54, 0.2)',
+          zIndex: 60,
+        }}
+      />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="panel-header between">
         <div>
@@ -575,12 +655,23 @@ export default function CodingRoundPage() {
         {cameraError
           ? cameraError
           : cameraReady
-            ? `Active${typeof faceCount === 'number' ? ` • Faces detected: ${faceCount}` : ''}`
+            ? `Active${typeof faceCount === 'number' ? ` • Faces detected: ${faceCount}` : ''}${detectorEngine ? ` • Detector: ${detectorEngine}` : ''}`
             : 'Starting camera...'}
       </div>
+      {cameraReady && qualityHint && (
+        <div className="hint" style={{ marginBottom: '0.65rem' }}>
+          <strong>Camera Quality:</strong> {qualityHint}
+        </div>
+      )}
       <div className="hint" style={{ marginBottom: '0.65rem' }}>
         <strong>Proctoring warnings:</strong> {proctorWarnings}/{MAX_PROCTOR_WARNINGS} used • {Math.max(0, MAX_PROCTOR_WARNINGS - proctorWarnings)} left
       </div>
+
+      {!question && !loadingQuestion && (
+        <div className="hint" style={{ marginBottom: '0.65rem' }}>
+          <strong>No question loaded.</strong> Click New Question to fetch the next coding problem.
+        </div>
+      )}
 
       {showViolationPrompt && (
         <div className="error-box">

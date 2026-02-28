@@ -6,6 +6,7 @@ const links = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/profile', label: 'Profile' },
   { to: '/resume-upload', label: 'Resume' },
+  { to: '/jobs', label: 'Jobs' },
   { to: '/domain-switch', label: 'Domain Switch' },
   { to: '/interview', label: 'Interview Hub' },
   { to: '/interview/coding', label: 'Coding' },

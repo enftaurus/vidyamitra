@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, apiError } from '../api';
 import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, toUiStatus } from '../interviewFlow';
+import { clearRoundStatus } from '../roundStatus';
 import DynamicHeadline from '../components/DynamicHeadline';
 import MarqueeText from '../components/MarqueeText';
 
@@ -37,10 +38,13 @@ export default function InterviewHubPage() {
   }, []);
 
   const onReset = async () => {
+    if (!window.confirm('Reset all rounds? This will clear all progress and you will start from the beginning.')) return;
     try {
       await api.post('/interview_flow/reset');
+      clearRoundStatus();
       localStorage.removeItem('interview_cycle_closed');
       setCycleClosed(false);
+      setError('');
       await loadStatus();
     } catch (err) {
       setError(apiError(err, 'Unable to reset interview flow'));
@@ -50,8 +54,10 @@ export default function InterviewHubPage() {
   const onStartNewCycle = async () => {
     try {
       await api.post('/interview_flow/reset');
+      clearRoundStatus();
       localStorage.removeItem('interview_cycle_closed');
       setCycleClosed(false);
+      setError('');
       await loadStatus();
     } catch (err) {
       setError(apiError(err, 'Unable to start new cycle'));
@@ -96,7 +102,16 @@ export default function InterviewHubPage() {
             </div>
           </div>
         </div>
-        <button className="btn ghost" onClick={onReset}>Reset All Rounds</button>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+        <button
+          className="btn"
+          onClick={onReset}
+          style={{ background: '#e74c3c', color: '#fff', fontWeight: 600 }}
+        >
+          Reset All Rounds
+        </button>
       </div>
 
       <div className="hub-grid">
