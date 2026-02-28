@@ -144,21 +144,35 @@ export default function LandingPage() {
 
   return (
     <div className="landing-page">
+      {/* ─── TOP NAV (HackerRank style) ─── */}
+      <nav className="landing-topnav">
+        <div className="landing-topnav-left">
+          <Link to="/" className="landing-brand">
+            VidyaMitra<span className="landing-brand-dot">■</span>
+          </Link>
+          <a href="#how-it-works">Features</a>
+          <a href="#flow-section">How it Works</a>
+        </div>
+        <div className="landing-topnav-right">
+          <Link to="/auth" className="landing-nav-link">Log In</Link>
+          <Link to="/admin" className="landing-nav-btn">For Enterprise</Link>
+        </div>
+      </nav>
+
       {/* ─── HERO ─── */}
       <section className="landing-hero">
         <div className="landing-hero-glow" />
         <span className="landing-overline">FREE AI MOCK INTERVIEW SIMULATOR</span>
         <HeroTitle words={heroWords} />
         <p className="landing-hero-sub">
-          A free mock interview simulator powered by AI. Practice Coding, Technical, Manager, HR — and more — with instant feedback after every session. No scheduling. No cost.
+          We help thousands of candidates ace interviews and upskill with AI-powered practice, and enterprises to evaluate talent — all in one platform.
         </p>
         <div className="landing-hero-cta">
           <Link className="landing-btn primary" to="/auth">
-            Start Free AI Mock Interview <span className="arrow">→</span>
+            For Developers <span className="arrow">→</span>
           </Link>
-          <a className="landing-btn outline" href="#how-it-works">How it works</a>
-          <Link className="landing-btn outline admin-btn" to="/admin">
-            🛡️ Admin Portal
+          <Link className="landing-btn outline-dark" to="/admin">
+            For Enterprise
           </Link>
         </div>
         <div className="landing-badges">
@@ -235,7 +249,7 @@ export default function LandingPage() {
         <h2 className="landing-section-title">
           How a Session <span className="gradient-text">Works</span>
         </h2>
-        <div className="landing-flow">
+        <div className="landing-flow" id="flow-section">
           {[
             { step: '01', title: 'Sign Up & Upload Resume', desc: 'Create an account and upload your resume. AI extracts your skills and domain.' },
             { step: '02', title: 'Start Interview Round', desc: 'Choose Coding, Technical, Manager, or HR — the AI adapts to your domain.' },

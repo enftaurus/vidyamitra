@@ -1,35 +1,109 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api, apiError } from '../api';
 
+const ADMIN_EMAIL = 'admin@vidyamitra.com';
+const ADMIN_PASSWORD = 'admin123';
+
 export default function AdminPortalPage() {
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem('vm-admin') === '1');
   const [tab, setTab] = useState('jobs');
 
+  const handleLogout = () => {
+    sessionStorage.removeItem('vm-admin');
+    setAuthed(false);
+  };
+
+  if (!authed) {
+    return <AdminLogin onSuccess={() => { sessionStorage.setItem('vm-admin', '1'); setAuthed(true); }} />;
+  }
+
   return (
-    <section className="panel admin-portal">
-      <div className="panel-header">
-        <h2>🛡️ Admin Portal</h2>
-        <p className="muted">Manage jobs and browse user profiles</p>
-      </div>
+    <div className="admin-shell">
+      {/* ── Admin top bar ── */}
+      <header className="admin-topbar">
+        <Link to="/" className="admin-brand">VidyaMitra<span className="admin-brand-tag">Enterprise</span></Link>
+        <div className="admin-topbar-right">
+          <span className="admin-user-badge">🛡️ Admin</span>
+          <button className="btn ghost small" onClick={handleLogout}>Logout</button>
+        </div>
+      </header>
 
-      <div className="admin-tabs">
-        <button
-          className={`admin-tab ${tab === 'jobs' ? 'active' : ''}`}
-          onClick={() => setTab('jobs')}
-        >
-          📋 Manage Jobs
-        </button>
-        <button
-          className={`admin-tab ${tab === 'users' ? 'active' : ''}`}
-          onClick={() => setTab('users')}
-        >
-          👥 Browse Users
-        </button>
-      </div>
+      <section className="panel admin-portal">
+        <div className="panel-header">
+          <h2>Admin Portal</h2>
+          <p className="muted">Manage jobs and browse user profiles</p>
+        </div>
 
-      {tab === 'jobs' && <ManageJobs />}
-      {tab === 'users' && <BrowseUsers />}
-    </section>
+        <div className="admin-tabs">
+          <button className={`admin-tab ${tab === 'jobs' ? 'active' : ''}`} onClick={() => setTab('jobs')}>
+            📋 Manage Jobs
+          </button>
+          <button className={`admin-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>
+            👥 Browse Users
+          </button>
+        </div>
+
+        {tab === 'jobs' && <ManageJobs />}
+        {tab === 'users' && <BrowseUsers />}
+      </section>
+    </div>
+  );
+}
+
+/* ─── ADMIN LOGIN SCREEN ─── */
+function AdminLogin({ onSuccess }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    if (email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      onSuccess();
+    } else {
+      setError('Invalid admin credentials');
+    }
+  };
+
+  return (
+    <div className="admin-login-page">
+      <div className="admin-login-card">
+        <div className="admin-login-header">
+          <Link to="/" className="admin-login-brand">VidyaMitra<span className="admin-brand-dot">■</span></Link>
+          <h2>Enterprise Login</h2>
+          <p className="muted">Sign in to the admin dashboard</p>
+        </div>
+        <form className="admin-login-form" onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@vidyamitra.com"
+              autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          {error && <div className="error-box">{error}</div>}
+          <button className="btn primary full" type="submit">Sign In</button>
+        </form>
+        <div className="admin-login-hint">
+          <span className="muted">Demo credentials: admin@vidyamitra.com / admin123</span>
+        </div>
+        <Link to="/" className="admin-back-link">← Back to VidyaMitra</Link>
+      </div>
+    </div>
   );
 }
 
@@ -185,11 +259,27 @@ function BrowseUsers() {
     load();
   }, []);
 
+  /* collect all unique skills across users for quick-pick buttons */
+  const allSkills = [...new Set(users.flatMap((u) => (u.skills || []).map((s) => s.toLowerCase())))];
+  const topSkills = allSkills.slice(0, 20);
+
   const filtered = users.filter((u) => {
     if (!search.trim()) return true;
-    const hay = [u.name, u.email].filter(Boolean).join(' ').toLowerCase();
-    return hay.includes(search.trim().toLowerCase());
+    const terms = search.toLowerCase().split(',').map((t) => t.trim()).filter(Boolean);
+    const hayName = [u.name, u.email, u.domain].filter(Boolean).join(' ').toLowerCase();
+    const haySkills = (u.skills || []).join(' ').toLowerCase();
+    const hay = hayName + ' ' + haySkills;
+    return terms.every((term) => hay.includes(term));
   });
+
+  const toggleSkill = (skill) => {
+    const current = search.toLowerCase().split(',').map((t) => t.trim()).filter(Boolean);
+    if (current.includes(skill.toLowerCase())) {
+      setSearch(current.filter((t) => t !== skill.toLowerCase()).join(', '));
+    } else {
+      setSearch([...current, skill].join(', '));
+    }
+  };
 
   return (
     <div className="admin-section">
@@ -198,12 +288,30 @@ function BrowseUsers() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search users by name or email..."
+          placeholder="Search by name, email, skill, or domain... (comma for AND)"
         />
-        <span className="muted" style={{ marginLeft: '1rem' }}>
+        <span className="muted" style={{ marginLeft: '1rem', whiteSpace: 'nowrap' }}>
           {filtered.length} of {users.length} users
         </span>
       </div>
+
+      {topSkills.length > 0 && (
+        <div className="admin-skill-chips">
+          <span className="admin-chip-label">Filter by skill:</span>
+          {topSkills.map((skill) => {
+            const active = search.toLowerCase().split(',').map((t) => t.trim()).includes(skill);
+            return (
+              <button
+                key={skill}
+                className={`admin-skill-chip ${active ? 'active' : ''}`}
+                onClick={() => toggleSkill(skill)}
+              >
+                {skill}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading ? (
         <div className="hint">Loading users...</div>
@@ -225,6 +333,19 @@ function BrowseUsers() {
               <div className="admin-user-info">
                 <h4>{user.name || 'Unknown'}</h4>
                 <p className="muted">{user.email || '-'}</p>
+                {user.domain && <span className="admin-user-domain">{user.domain}</span>}
+                {user.phone && <p className="admin-user-phone">📞 {user.phone}</p>}
+                {user.bio && <p className="admin-user-bio">{user.bio.length > 80 ? user.bio.slice(0, 80) + '...' : user.bio}</p>}
+                {(user.skills || []).length > 0 && (
+                  <div className="admin-user-skills">
+                    {user.skills.slice(0, 6).map((skill, i) => (
+                      <span key={i} className="admin-user-skill-pill">{skill}</span>
+                    ))}
+                    {user.skills.length > 6 && (
+                      <span className="admin-user-skill-more">+{user.skills.length - 6}</span>
+                    )}
+                  </div>
+                )}
                 <span className="admin-user-id">ID: {user.id}</span>
               </div>
               <span className="admin-user-arrow">→</span>

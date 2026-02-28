@@ -15,10 +15,59 @@ class JobCreate(BaseModel):
 
 @router.get("/users")
 def list_users():
-    """Return all registered users (id, name, email)."""
+    """Return all registered users with their profile details and skills."""
     try:
-        response = supabase.table("users").select("id, name, email").execute()
-        return response.data
+        users_resp = supabase.table("users").select("id, name, email").execute()
+        users = users_resp.data or []
+
+        enriched = []
+        for u in users:
+            entry = {"id": u["id"], "name": u.get("name", ""), "email": u.get("email", "")}
+            try:
+                profile_resp = supabase.rpc(
+                    "get_full_candidate_profile", {"p_user_id": u["id"]}
+                ).execute()
+                if profile_resp.data:
+                    row = profile_resp.data[0] if isinstance(profile_resp.data, list) else profile_resp.data
+                    # Extract skills
+                    skills_raw = row.get("skills") or []
+                    if isinstance(skills_raw, str):
+                        import json as _json
+                        try:
+                            skills_raw = _json.loads(skills_raw)
+                        except Exception:
+                            skills_raw = []
+                    skill_names = []
+                    for s in skills_raw:
+                        if isinstance(s, dict):
+                            skill_names.append(s.get("skill_name") or s.get("name") or str(s))
+                        else:
+                            skill_names.append(str(s))
+                    entry["skills"] = skill_names
+
+                    # Extract domain and bio from candidates sub-object or top level
+                    candidates = row.get("candidates") or {}
+                    if isinstance(candidates, str):
+                        try:
+                            candidates = _json.loads(candidates)
+                        except Exception:
+                            candidates = {}
+                    entry["domain"] = candidates.get("domain") or row.get("domain") or ""
+                    entry["bio"] = candidates.get("bio") or row.get("bio") or ""
+                    entry["phone"] = candidates.get("phone") or row.get("phone") or ""
+                else:
+                    entry["skills"] = []
+                    entry["domain"] = ""
+                    entry["bio"] = ""
+                    entry["phone"] = ""
+            except Exception:
+                entry["skills"] = []
+                entry["domain"] = ""
+                entry["bio"] = ""
+                entry["phone"] = ""
+            enriched.append(entry)
+
+        return enriched
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

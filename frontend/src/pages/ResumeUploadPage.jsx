@@ -12,6 +12,95 @@ const resumeTemplateOptions = [
   { value: 'modern', label: 'Modern' },
 ];
 
+/* ── Mini resume template previews ── */
+function TemplatePreview({ template, selected, onSelect }) {
+  return (
+    <div
+      className={`resume-tpl-card ${selected ? 'selected' : ''}`}
+      onClick={() => onSelect(template.value)}
+    >
+      <div className={`resume-tpl-preview ${template.value}`}>
+        {template.value === 'classic' && (
+          <>
+            <div className="tpl-header-bar classic-bar">
+              <div className="tpl-name-line" />
+              <div className="tpl-contact-line" />
+            </div>
+            <div className="tpl-body">
+              <div className="tpl-section-title classic-accent" />
+              <div className="tpl-line w80" />
+              <div className="tpl-line w60" />
+              <div className="tpl-section-title classic-accent" />
+              <div className="tpl-line w90" />
+              <div className="tpl-line w70" />
+              <div className="tpl-line w50" />
+              <div className="tpl-section-title classic-accent" />
+              <div className="tpl-pills">
+                <span /><span /><span /><span />
+              </div>
+            </div>
+          </>
+        )}
+        {template.value === 'minimal' && (
+          <>
+            <div className="tpl-header-bar minimal-bar">
+              <div className="tpl-name-line dark" />
+              <div className="tpl-subtitle-line" />
+              <div className="tpl-contact-line" />
+            </div>
+            <div className="tpl-body">
+              <div className="tpl-divider" />
+              <div className="tpl-section-title dark" />
+              <div className="tpl-line w80" />
+              <div className="tpl-line w70" />
+              <div className="tpl-divider" />
+              <div className="tpl-section-title dark" />
+              <div className="tpl-line w90" />
+              <div className="tpl-line w60" />
+              <div className="tpl-divider" />
+              <div className="tpl-section-title dark" />
+              <div className="tpl-pills dark-pills">
+                <span /><span /><span />
+              </div>
+            </div>
+          </>
+        )}
+        {template.value === 'modern' && (
+          <div className="tpl-modern-layout">
+            <div className="tpl-sidebar">
+              <div className="tpl-avatar" />
+              <div className="tpl-side-line" />
+              <div className="tpl-side-line short" />
+              <div className="tpl-side-gap" />
+              <div className="tpl-side-label" />
+              <div className="tpl-side-line" />
+              <div className="tpl-side-line short" />
+              <div className="tpl-side-gap" />
+              <div className="tpl-side-label" />
+              <div className="tpl-side-pill" />
+              <div className="tpl-side-pill short" />
+            </div>
+            <div className="tpl-main">
+              <div className="tpl-name-line light" />
+              <div className="tpl-contact-line light" />
+              <div className="tpl-section-title light" />
+              <div className="tpl-line w80 light" />
+              <div className="tpl-line w60 light" />
+              <div className="tpl-section-title light" />
+              <div className="tpl-line w90 light" />
+              <div className="tpl-line w70 light" />
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="resume-tpl-label">
+        <span className="resume-tpl-name">{template.label}</span>
+        {selected && <span className="resume-tpl-check">✓</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function ResumeUploadPage() {
   const [mode, setMode] = useState('upload');
   const [file, setFile] = useState(null);
@@ -470,18 +559,17 @@ export default function ResumeUploadPage() {
           ))}
           <button type="button" className="btn ghost" onClick={() => addListItem('projects', emptyProject)}>+ Add Project</button>
 
-          <label>Resume PDF Template</label>
-          <select
-            className="select"
-            value={selectedTemplate}
-            onChange={(e) => setSelectedTemplate(e.target.value)}
-          >
-            {resumeTemplateOptions.map((template) => (
-              <option key={template.value} value={template.value}>
-                {template.label}
-              </option>
+          <h3>Choose Resume Template</h3>
+          <div className="resume-tpl-grid">
+            {resumeTemplateOptions.map((tpl) => (
+              <TemplatePreview
+                key={tpl.value}
+                template={tpl}
+                selected={selectedTemplate === tpl.value}
+                onSelect={setSelectedTemplate}
+              />
             ))}
-          </select>
+          </div>
 
           <div className="between">
             <button type="submit" className="btn">Build Resume</button>

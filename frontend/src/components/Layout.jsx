@@ -10,7 +10,6 @@ const links = [
   { to: '/jobs', label: 'Jobs' },
   { to: '/job-market', label: 'Job Market' },
   { to: '/domain-switch', label: 'Domain Switch' },
-  { to: '/admin', label: 'Admin' },
   { to: '/interview', label: 'Interview Hub' },
   { to: '/interview/coding', label: 'Coding' },
   { to: '/interview/technical', label: 'Technical' },
@@ -22,8 +21,9 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState('light');
-  const showLogout = location.pathname !== '/auth' && location.pathname !== '/';
+  const showLogout = location.pathname !== '/auth' && location.pathname !== '/' && !location.pathname.startsWith('/admin');
   const isLanding = location.pathname === '/';
+  const isAdmin = location.pathname.startsWith('/admin');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('vidyamitra-theme');
@@ -50,8 +50,8 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className={`app-shell ${isLanding ? 'landing-mode' : ''}`}>
-      {!isLanding && (
+    <div className={`app-shell ${isLanding ? 'landing-mode' : ''} ${isAdmin ? 'admin-mode' : ''}`}>
+      {!isLanding && !isAdmin && (
       <header className="topbar">
         <Link to="/" className="brand">VidyaMitra</Link>
         <nav className="nav-links">
@@ -75,7 +75,7 @@ export default function Layout({ children }) {
         )}
       </header>
       )}
-      <main className={isLanding ? '' : 'content'}>{children}</main>
+      <main className={isLanding || isAdmin ? '' : 'content'}>{children}</main>
     </div>
   );
 }
