@@ -18,6 +18,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState('light');
+  const showLogout = location.pathname !== '/auth';
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('vidyamitra-theme');
@@ -61,9 +62,11 @@ export default function Layout({ children }) {
         <button className="theme-toggle" onClick={onToggleTheme}>
           {theme === 'dark' ? '☀ Light' : '🌙 Dark'}
         </button>
-        <button className="btn ghost" onClick={onLogout}>
-          Logout
-        </button>
+        {showLogout && (
+          <button className="btn ghost" onClick={onLogout}>
+            Logout
+          </button>
+        )}
       </header>
       <main className="content">{children}</main>
     </div>

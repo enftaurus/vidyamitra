@@ -26,7 +26,12 @@ export default function InterviewPage({ title, basePath, roundKey }) {
   const faceIntervalRef = useRef(null);
   const forcingResetRef = useRef(false);
   const proctorViolationCountRef = useRef(0);
-  const MAX_PROCTOR_WARNINGS = 5;
+  const proctorWarningLimitByRound = {
+    technical: 15,
+    manager: 10,
+    hr: 10,
+  };
+  const MAX_PROCTOR_WARNINGS = proctorWarningLimitByRound[roundKey] ?? 5;
 
   const forceResetAllRounds = async (message) => {
     if (forcingResetRef.current) return;
@@ -201,7 +206,7 @@ export default function InterviewPage({ title, basePath, roundKey }) {
             setProctorWarnings(warningNo);
 
             if (warningNo >= MAX_PROCTOR_WARNINGS) {
-              await forceResetAllRounds('Proctoring rule violated 5 times (no face/multiple faces). Interview terminated and all rounds reset.');
+              await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (no face/multiple faces). Interview terminated and all rounds reset.`);
               return;
             }
 

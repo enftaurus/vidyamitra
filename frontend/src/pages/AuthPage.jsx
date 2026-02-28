@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, apiError } from '../api';
-import authVisual from '../assets/auth-visual.svg';
 import DynamicHeadline from '../components/DynamicHeadline';
 import MarqueeText from '../components/MarqueeText';
 
@@ -67,7 +66,6 @@ export default function AuthPage() {
             'Instant Feedback',
           ]}
         />
-        <img src={authVisual} alt="Interview platform overview" />
       </article>
 
       <article className="panel auth-panel">

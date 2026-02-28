@@ -70,7 +70,7 @@ export default function InterviewHubPage() {
             prefix="AI Powered"
             words={['Interview Hub', 'Round Progress', 'Practice Engine']}
           />
-          <p className="muted">Complete all rounds for full assessment</p>
+          <p className="muted">AI Interview Practice That Prepares You for Real Interviews - Not Just LeetCode.</p>
           <MarqueeText
             items={[
               'Coding Round',

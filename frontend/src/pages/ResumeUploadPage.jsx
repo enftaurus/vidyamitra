@@ -6,6 +6,11 @@ import jsPDF from 'jspdf';
 const emptyCertificate = { certificate_name: '', certificate_issuer: '', certificate_date: '' };
 const emptyProject = { project_name: '', project_description: '', project_link: '' };
 const emptyPlacement = { company: '', role: '', duration: '', description: '' };
+const resumeTemplateOptions = [
+  { value: 'classic', label: 'Classic' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'modern', label: 'Modern' },
+];
 
 export default function ResumeUploadPage() {
   const [mode, setMode] = useState('upload');
@@ -13,6 +18,7 @@ export default function ResumeUploadPage() {
   const [result, setResult] = useState(null);
   const [generatedResume, setGeneratedResume] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState('classic');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
@@ -102,6 +108,31 @@ export default function ResumeUploadPage() {
   const onDownloadPdf = () => {
     if (!generatedResume) return;
 
+    const activeTemplate = resumeTemplateOptions.some((item) => item.value === selectedTemplate)
+      ? selectedTemplate
+      : 'classic';
+
+    const templateConfig = {
+      classic: {
+        headingColor: [30, 41, 59],
+        bodyColor: [45, 55, 72],
+        accentColor: [67, 97, 238],
+        metaColor: [67, 84, 105],
+      },
+      minimal: {
+        headingColor: [17, 24, 39],
+        bodyColor: [31, 41, 55],
+        accentColor: [99, 102, 112],
+        metaColor: [75, 85, 99],
+      },
+      modern: {
+        headingColor: [255, 255, 255],
+        bodyColor: [39, 49, 71],
+        accentColor: [44, 62, 124],
+        metaColor: [228, 234, 247],
+      },
+    }[activeTemplate];
+
     const doc = new jsPDF('p', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -118,13 +149,23 @@ export default function ResumeUploadPage() {
 
     const addSectionTitle = (title) => {
       ensureSpace(12);
-      doc.setDrawColor(67, 97, 238);
-      doc.setLineWidth(0.6);
-      doc.line(margin, y + 1.5, margin + 18, y + 1.5);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.setTextColor(30, 41, 59);
-      doc.text(title, margin + 22, y + 2.5);
+      if (activeTemplate === 'minimal') {
+        doc.setDrawColor(...templateConfig.accentColor);
+        doc.setLineWidth(0.3);
+        doc.line(margin, y + 2, pageWidth - margin, y + 2);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11.5);
+        doc.setTextColor(...templateConfig.headingColor);
+        doc.text(String(title || '').toUpperCase(), margin, y + 7);
+      } else {
+        doc.setDrawColor(...templateConfig.accentColor);
+        doc.setLineWidth(0.6);
+        doc.line(margin, y + 1.5, margin + 18, y + 1.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(...(activeTemplate === 'modern' ? templateConfig.bodyColor : templateConfig.headingColor));
+        doc.text(title, margin + 22, y + 2.5);
+      }
       y += 9;
     };
 
@@ -135,7 +176,7 @@ export default function ResumeUploadPage() {
       ensureSpace(lines.length * lineHeight + spacing + 2);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10.5);
-      doc.setTextColor(45, 55, 72);
+      doc.setTextColor(...templateConfig.bodyColor);
       doc.text(lines, margin + indent, y);
       y += lines.length * lineHeight + spacing;
     };
@@ -144,7 +185,7 @@ export default function ResumeUploadPage() {
       ensureSpace(7);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10.5);
-      doc.setTextColor(71, 85, 105);
+      doc.setTextColor(...(activeTemplate === 'modern' ? templateConfig.bodyColor : templateConfig.metaColor));
       doc.text(String(leftText || '-'), margin, y);
       if (rightText) {
         doc.text(String(rightText), pageWidth - margin, y, { align: 'right' });
@@ -161,7 +202,7 @@ export default function ResumeUploadPage() {
         ensureSpace(7);
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(10.5);
-        doc.setTextColor(45, 55, 72);
+        doc.setTextColor(...templateConfig.bodyColor);
         doc.text('•', margin + 1.5, y);
         const lines = doc.splitTextToSize(String(item || '-'), contentWidth - 7);
         doc.text(lines, margin + 6, y);
@@ -169,27 +210,69 @@ export default function ResumeUploadPage() {
       });
     };
 
-    doc.setFillColor(245, 248, 255);
-    doc.roundedRect(margin, y - 2, contentWidth, 28, 3, 3, 'F');
+    if (activeTemplate === 'modern') {
+      doc.setFillColor(...templateConfig.accentColor);
+      doc.roundedRect(margin, y - 2, contentWidth, 32, 3, 3, 'F');
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.setTextColor(30, 41, 59);
-    doc.text(generatedResume.basic.name || 'Candidate Name', margin + 4, y + 8);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.setTextColor(...templateConfig.headingColor);
+      doc.text(generatedResume.basic.name || 'Candidate Name', margin + 4, y + 9);
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10.5);
-    doc.setTextColor(67, 84, 105);
-    doc.text(
-      `${generatedResume.basic.email || '-'}  |  ${generatedResume.basic.phone || '-'}  |  ${generatedResume.basic.location || '-'}`,
-      margin + 4,
-      y + 14
-    );
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...templateConfig.metaColor);
+      doc.text(
+        `${generatedResume.basic.email || '-'}  |  ${generatedResume.basic.phone || '-'}  |  ${generatedResume.basic.location || '-'}`,
+        margin + 4,
+        y + 15
+      );
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    doc.setTextColor(44, 62, 124);
-    doc.text(`Primary Domain: ${generatedResume.basic.domain || '-'}`, margin + 4, y + 20);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...templateConfig.metaColor);
+      doc.text(`Primary Domain: ${generatedResume.basic.domain || '-'}`, margin + 4, y + 22);
+    } else if (activeTemplate === 'minimal') {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(21);
+      doc.setTextColor(...templateConfig.headingColor);
+      doc.text(generatedResume.basic.name || 'Candidate Name', margin, y + 7);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...templateConfig.metaColor);
+      doc.text(
+        `${generatedResume.basic.email || '-'}  |  ${generatedResume.basic.phone || '-'}  |  ${generatedResume.basic.location || '-'}`,
+        margin,
+        y + 13
+      );
+      doc.text(`Primary Domain: ${generatedResume.basic.domain || '-'}`, margin, y + 19);
+      doc.setDrawColor(...templateConfig.accentColor);
+      doc.setLineWidth(0.4);
+      doc.line(margin, y + 23, pageWidth - margin, y + 23);
+    } else {
+      doc.setFillColor(245, 248, 255);
+      doc.roundedRect(margin, y - 2, contentWidth, 28, 3, 3, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.setTextColor(...templateConfig.headingColor);
+      doc.text(generatedResume.basic.name || 'Candidate Name', margin + 4, y + 8);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...templateConfig.metaColor);
+      doc.text(
+        `${generatedResume.basic.email || '-'}  |  ${generatedResume.basic.phone || '-'}  |  ${generatedResume.basic.location || '-'}`,
+        margin + 4,
+        y + 14
+      );
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(...templateConfig.accentColor);
+      doc.text(`Primary Domain: ${generatedResume.basic.domain || '-'}`, margin + 4, y + 20);
+    }
 
     y += 33;
 
@@ -247,9 +330,9 @@ export default function ResumeUploadPage() {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(107, 114, 128);
-    doc.text('Generated by Vidyamitra Resume Builder', margin, pageHeight - 9);
+    doc.text(`Generated by Vidyamitra Resume Builder • Template: ${resumeTemplateOptions.find((item) => item.value === activeTemplate)?.label || 'Classic'}`, margin, pageHeight - 9);
 
-    doc.save(`${(generatedResume.basic.name || 'resume').replace(/\s+/g, '_')}.pdf`);
+    doc.save(`${(generatedResume.basic.name || 'resume').replace(/\s+/g, '_')}_${activeTemplate}.pdf`);
   };
 
   const updateListItem = (listKey, index, field, value) => {
@@ -386,6 +469,19 @@ export default function ResumeUploadPage() {
             </div>
           ))}
           <button type="button" className="btn ghost" onClick={() => addListItem('projects', emptyProject)}>+ Add Project</button>
+
+          <label>Resume PDF Template</label>
+          <select
+            className="select"
+            value={selectedTemplate}
+            onChange={(e) => setSelectedTemplate(e.target.value)}
+          >
+            {resumeTemplateOptions.map((template) => (
+              <option key={template.value} value={template.value}>
+                {template.label}
+              </option>
+            ))}
+          </select>
 
           <div className="between">
             <button type="submit" className="btn">Build Resume</button>
