@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import AuthPage from './pages/AuthPage';
 import DashboardPage from './pages/DashboardPage';
@@ -10,12 +10,13 @@ import DomainSwitchPage from './pages/DomainSwitchPage';
 import ResumeUploadPage from './pages/ResumeUploadPage';
 import JobsPage from './pages/JobsPage';
 import JobMarketPage from './pages/JobMarketPage';
+import LandingPage from './pages/LandingPage';
 
 export default function App() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Navigate to="/auth" replace />} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<ProfilePage />} />

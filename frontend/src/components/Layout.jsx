@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 
 const links = [
+  { to: '/', label: 'Home' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/profile', label: 'Profile' },
   { to: '/resume-upload', label: 'Resume' },
@@ -20,7 +21,8 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, setTheme] = useState('light');
-  const showLogout = location.pathname !== '/auth';
+  const showLogout = location.pathname !== '/auth' && location.pathname !== '/';
+  const isLanding = location.pathname === '/';
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('vidyamitra-theme');
@@ -47,9 +49,10 @@ export default function Layout({ children }) {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isLanding ? 'landing-mode' : ''}`}>
+      {!isLanding && (
       <header className="topbar">
-        <div className="brand">Vidyamitra Portal</div>
+        <Link to="/" className="brand">VidyaMitra</Link>
         <nav className="nav-links">
           {links.map((link) => (
             <Link
@@ -70,7 +73,8 @@ export default function Layout({ children }) {
           </button>
         )}
       </header>
-      <main className="content">{children}</main>
+      )}
+      <main className={isLanding ? '' : 'content'}>{children}</main>
     </div>
   );
 }
