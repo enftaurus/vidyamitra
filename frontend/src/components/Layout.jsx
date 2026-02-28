@@ -7,6 +7,7 @@ const links = [
   { to: '/profile', label: 'Profile' },
   { to: '/resume-upload', label: 'Resume' },
   { to: '/jobs', label: 'Jobs' },
+  { to: '/job-market', label: 'Job Market' },
   { to: '/domain-switch', label: 'Domain Switch' },
   { to: '/interview', label: 'Interview Hub' },
   { to: '/interview/coding', label: 'Coding' },

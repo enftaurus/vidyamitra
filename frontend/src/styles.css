@@ -1201,3 +1201,144 @@ pre {
   border-color: #bfd1ee;
   background: rgba(255, 255, 255, 0.95);
 }
+
+/* ── Job Market Analysis ── */
+.jm-domain-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.2rem;
+}
+.jm-tab {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.jm-tab:hover { background: var(--accent); color: #fff; }
+.jm-tab.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+.jm-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+}
+.jm-stat-card {
+  background: var(--bg2);
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 75%);
+  border-radius: 12px;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: var(--card-shadow);
+}
+.jm-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.jm-stat-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+.jm-stat-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.jm-charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1rem;
+}
+.jm-chart-card {
+  background: var(--bg2);
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 80%);
+  border-radius: 14px;
+  padding: 1.2rem;
+  box-shadow: var(--card-shadow);
+}
+.jm-chart-card h3 {
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* Pie chart */
+.jm-pie-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.jm-pie {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.jm-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.jm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.jm-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.jm-legend-item strong {
+  margin-left: auto;
+  min-width: 38px;
+  text-align: right;
+}
+
+/* Bar chart */
+.jm-bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.jm-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.jm-bar-label {
+  min-width: 120px;
+  font-size: 0.8rem;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.jm-bar-track {
+  flex: 1;
+  height: 18px;
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.jm-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.5s ease;
+}
+.jm-bar-value {
+  min-width: 56px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: right;
+}
