@@ -117,16 +117,6 @@ It can be extended toward:
 - Comparative evaluation of different LLMs
 - Fairness-aware scoring models
 
-### Why This Version Is Better For IITH
-
-Now it:
-
-- Sounds architectural
-- Sounds research-aware
-- Emphasizes system design
-- Shows understanding of LLM limitations
-- Demonstrates structured engineering thinking
-- Not just “AI-powered platform”
 
 ---
 
