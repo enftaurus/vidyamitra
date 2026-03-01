@@ -12,6 +12,7 @@ import JobsPage from './pages/JobsPage';
 import JobMarketPage from './pages/JobMarketPage';
 import LandingPage from './pages/LandingPage';
 import AdminPortalPage from './pages/AdminPortalPage';
+import SkillQuizPage from './pages/SkillQuizPage';
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/jobs" element={<JobsPage />} />
         <Route path="/job-market" element={<JobMarketPage />} />
         <Route path="/admin" element={<AdminPortalPage />} />
+        <Route path="/skill-quiz" element={<SkillQuizPage />} />
         <Route path="/interview" element={<InterviewHubPage />} />
         <Route path="/interview/coding" element={<CodingRoundPage />} />
         <Route

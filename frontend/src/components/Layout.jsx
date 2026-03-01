@@ -15,6 +15,7 @@ const links = [
   { to: '/interview/technical', label: 'Technical' },
   { to: '/interview/manager', label: 'Manager' },
   { to: '/interview/hr', label: 'HR' },
+  { to: '/skill-quiz', label: 'Skill Quiz' },
 ];
 
 export default function Layout({ children }) {
