@@ -658,6 +658,3 @@ The backend relies on the following Supabase resources:
 
 ---
 
-## License
-
-This project is developed as part of an academic/professional initiative. Please check with the repository owner for licensing details.
