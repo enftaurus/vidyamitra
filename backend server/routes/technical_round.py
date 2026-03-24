@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 from typing import Any
 from models.technical_round import model_result, InterviewState, final_analysis, interview_answer_request
 from services.db_client import supabase
+from services.leaderboard import record_round_score
 from services.redis import redis_client
 from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
 import os
@@ -17,8 +18,8 @@ model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_ke
 structured_model = model.with_structured_output(model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
-MAX_QUESTIONS = 3
-MIN_CORE_TOPIC_QUESTIONS = 2
+MAX_QUESTIONS = 10
+MIN_CORE_TOPIC_QUESTIONS = 4
 
 
 def _single_question_text(text: str) -> str:
@@ -116,7 +117,7 @@ def generate_question(state: InterviewState) -> InterviewState:
 
     if len(qa) == 0:
         prompt = f"""
-You are a strict and professional technical interviewer at a top product-based company.
+You are a strict, high-pressure technical interviewer at a top product-based company.
 You are starting a structured technical mock interview.
 The following is the complete candidate profile (resume content).
 Read it carefully and use it to guide your questioning strategy.
@@ -125,25 +126,26 @@ CANDIDATE PROFILE:
 {candidate_profile}
 ---------------------------
 INSTRUCTIONS:
-0. You have only 3 total questions in this technical round.
+0. You have up to 10 total questions in this technical round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE short, basic technical question.
+2. Ask exactly ONE technically challenging question.
 3. Do NOT repeat any question from a previous round or session.
 4. Carefully analyze the resume and identify:
    - Core programming languages
    - Main technical skills
    - Notable projects
    - Areas of claimed expertise
-4. Start with a basic foundational question related to one of the candidate's claimed skills.
-5. Do NOT evaluate or score anything yet.
-6. Keep tone simple and interview-like.
+4. Start with a foundational but probing question related to one of the candidate's claimed skills.
+5. Plan coverage so major skills listed in the candidate profile are tested across the full round.
+6. Do NOT evaluate or score anything yet.
+7. Keep tone strict, direct, and interview-like.
 Avoid:
 - Giving feedback
 - Giving hints
 - Asking multiple questions
 - Asking unrelated topics not mentioned in the profile
 Generate:
-- Only one short question text
+- Only one concise but challenging question text
 """
         response = model.invoke([HumanMessage(content=prompt)])
         state["next_question"] = _single_question_text(response.content)
@@ -156,7 +158,7 @@ Generate:
         remaining_questions = MAX_QUESTIONS - len(qa)
         remaining_core_needed = max(0, MIN_CORE_TOPIC_QUESTIONS - core_topic_questions_asked)
         force_core_topic = remaining_core_needed > 0 and (
-            question_number in (3, 6) or remaining_questions <= remaining_core_needed
+            question_number in (3, 6, 9) or remaining_questions <= remaining_core_needed
         )
         forced_topic = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)] if force_core_topic else ""
 
@@ -187,20 +189,21 @@ Your Responsibilities:
    - End interview
 4. Decide whether the interview should end.
 5. If continuing, generate the next question.
-6. You only have 3 total questions in this round, so manage progression accordingly.
+6. You have up to 10 total questions in this round, so increase pressure and depth as performance allows.
+7. Ensure broad coverage of major skills claimed in the candidate profile.
 ==============================
 DIFFICULTY RULES:
 - If answer shows weak understanding → action = "decrease_difficulty"
 - If answer shows moderate understanding → action = "keep_difficulty"
 - If answer shows strong understanding → action = "increase_difficulty"
-Regardless of action, ask only one short, basic interview question.
+Regardless of action, ask only one challenging interview question.
 If the candidate repeatedly shows poor understanding, you may:
 action = "end_interview"
 should_end = true
 ==============================
 STOP RULES:
 - If question_number > {MAX_QUESTIONS} → must end interview immediately.
-- Never exceed 3 total questions in this round.
+- Never exceed 10 total questions in this round.
 - Do NOT randomly end interview without performance reason.
 If ending interview:
 - should_end = true
@@ -208,9 +211,9 @@ If ending interview:
 - action = "end_interview"
 If continuing:
 - should_end = false
-- Generate exactly ONE short next technical question.
+- Generate exactly ONE challenging next technical question.
 - The question MUST be different from every question in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
-- Keep it basic and clear.
+- Keep it clear, rigorous, and probing.
 - Do NOT give feedback.
 - Do NOT explain reasoning.
 - Do NOT ask multiple questions.
@@ -465,6 +468,10 @@ async def submit_answer(answer_payload: interview_answer_request, request: Reque
         if result_state.get("should_end") or result_state.get("action") == "end_interview":
             _clear_state(user_id, request)
             set_round_state(str(user_id), "technical", "completed")
+            analysis_payload = result_state.get("analysis")
+            if analysis_payload:
+                score = int(jsonable_encoder(analysis_payload).get("score", 0))
+                record_round_score(int(user_id), "technical", score)
             return JSONResponse(
                 {
                     "should_end": True,

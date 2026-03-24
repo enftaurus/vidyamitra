@@ -101,9 +101,19 @@ export default function JobsPage() {
                   <button
                     type="button"
                     className="btn ghost"
-                    onClick={() => {
-                      setInterviewUnlocked(true);
-                      window.alert('Quick Apply submitted. Interview rounds are unlocked for 5 minutes. Start any round within 5 minutes to keep access.');
+                    onClick={async () => {
+                      if (!job.id) {
+                        window.alert('Job id is missing. Unable to apply right now.');
+                        return;
+                      }
+
+                      try {
+                        await api.post('/jobs/quick-apply', { job_id: job.id });
+                        setInterviewUnlocked(true);
+                        window.alert('Quick Apply submitted. Interview rounds are unlocked for 5 minutes. Start any round within 5 minutes to keep access.');
+                      } catch (err) {
+                        window.alert(apiError(err, 'Unable to submit quick apply'));
+                      }
                     }}
                   >
                     Quick Apply

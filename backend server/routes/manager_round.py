@@ -12,6 +12,7 @@ from models.manager_round import (
     manager_answer_request,
 )
 from services.db_client import supabase
+from services.leaderboard import record_round_score
 from services.redis import redis_client
 from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
 import os
@@ -21,7 +22,7 @@ api_key = os.getenv("RESUME_API")
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(manager_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
-MAX_QUESTIONS = 3
+MAX_QUESTIONS = 10
 
 
 def _single_question_text(text: str) -> str:
@@ -109,21 +110,22 @@ def generate_question(state: ManagerInterviewState) -> ManagerInterviewState:
 
     if len(qa) == 0:
         prompt = f"""
-You are a hiring manager conducting a strict manager interview.
+You are a strict, high-bar hiring manager conducting a pressure manager interview.
 The focus of this round is projects explanation and problem solving.
 
 CANDIDATE PROFILE:
 {candidate_profile}
 
 INSTRUCTIONS:
-0. You have only 3 total questions in this manager round.
+0. You have up to 10 total questions in this manager round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE short and basic manager question.
+2. Ask exactly ONE demanding manager question.
 3. Ask exactly ONE question.
 4. The first question must be project-focused (project ownership, design choices, tradeoffs, impact).
-5. Keep the question practical, basic, and managerial.
-6. Do not provide feedback or hints.
-7. Do NOT repeat any question from a previous round or session.
+5. Keep the question practical, rigorous, and managerial.
+6. Across this round, cover major project and skill themes mentioned in the candidate profile.
+7. Do not provide feedback or hints.
+8. Do NOT repeat any question from a previous round or session.
 """
         response = model.invoke([HumanMessage(content=prompt)])
         state["next_question"] = _single_question_text(response.content)
@@ -132,7 +134,7 @@ INSTRUCTIONS:
     else:
         question_level = state["action"]
         prompt = f"""
-You are a strict hiring manager conducting a manager round.
+You are a strict hiring manager conducting a high-pressure manager round.
 
 CANDIDATE PROFILE:
 {candidate_profile}
@@ -153,8 +155,9 @@ RULES:
 5. The next question MUST be completely different from every question listed in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
 6. End if the interview quality is very poor or if question_number > {MAX_QUESTIONS}.
 7. Never ask more than {MAX_QUESTIONS} questions total.
-8. Every asked question must be short and basic.
-9. You only have 3 total questions in this round.
+8. Every asked question must be concise but probing.
+9. Use escalating difficulty where appropriate and challenge weak reasoning directly.
+10. Cover major skills/projects from the candidate profile across the full round.
 
 If ending:
 - should_end = true
@@ -330,6 +333,10 @@ async def submit_answer(answer_payload: manager_answer_request, request: Request
         if result_state.get("should_end") or result_state.get("action") == "end_interview":
             _clear_state(user_id, request)
             set_round_state(str(user_id), "manager", "completed")
+            analysis_payload = result_state.get("analysis")
+            if analysis_payload:
+                score = int(jsonable_encoder(analysis_payload).get("score", 0))
+                record_round_score(int(user_id), "manager", score)
             return JSONResponse(
                 {
                     "should_end": True,

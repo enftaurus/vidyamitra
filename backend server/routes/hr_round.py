@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 from typing import Any
 from models.hr_round import hr_model_result, HRInterviewState, final_analysis, hr_answer_request
 from services.db_client import supabase
+from services.leaderboard import record_round_score
 from services.redis import redis_client
 from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state, reset_flow_state
 import os
@@ -16,7 +17,7 @@ api_key = os.getenv("RESUME_API")
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(hr_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
-MAX_QUESTIONS = 3
+MAX_QUESTIONS = 10
 
 
 def _single_question_text(text: str) -> str:
@@ -104,21 +105,22 @@ def generate_question(state: HRInterviewState) -> HRInterviewState:
 
     if len(qa) == 0:
         prompt = f"""
-You are a professional HR interviewer conducting a personality-focused HR round.
+You are a strict HR interviewer conducting a high-pressure personality and behavior round.
 
 CANDIDATE PROFILE:
 {candidate_profile}
 
 INSTRUCTIONS:
-0. You have only 3 total questions in this HR round.
+0. You have up to 10 total questions in this HR round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE short and basic HR question.
+2. Ask exactly ONE probing HR question.
 3. Ask exactly ONE question.
 4. Focus on personality traits, communication, teamwork, ownership, adaptability, values, and behavior.
 5. Avoid deep technical questions.
 6. Do not give feedback or hints.
-7. Ask a basic behavioral question with clear wording.
-8. Do NOT repeat any question from a previous round or session.
+7. Ask a behavioral question with clear wording but strong depth.
+8. Cover communication, ownership, teamwork, and role-fit against the candidate's listed skills/projects across the full round.
+9. Do NOT repeat any question from a previous round or session.
 """
         response = model.invoke([HumanMessage(content=prompt)])
         state["next_question"] = _single_question_text(response.content)
@@ -127,7 +129,7 @@ INSTRUCTIONS:
     else:
         question_level = state["action"]
         prompt = f"""
-You are a strict HR interviewer conducting a structured HR round.
+You are a strict HR interviewer conducting a high-pressure structured HR round.
 
 CANDIDATE PROFILE:
 {candidate_profile}
@@ -151,8 +153,9 @@ RULES:
 5. The next question MUST be completely different from every question listed in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
 6. End if the interview quality is very poor or if question_number > {MAX_QUESTIONS}.
 7. Never ask more than {MAX_QUESTIONS} questions total.
-8. Every asked question must remain short and basic.
-9. You only have 3 total questions in this round.
+8. Every asked question must remain concise but challenging.
+9. Increase pressure when answers are vague; challenge inconsistencies.
+10. Over the round, validate role-fit against major skills/projects in the candidate profile.
 
 If ending:
 - should_end = true
@@ -327,6 +330,10 @@ async def submit_answer(answer_payload: hr_answer_request, request: Request):
 
         if result_state.get("should_end") or result_state.get("action") == "end_interview":
             _clear_state(user_id, request)
+            analysis_payload = result_state.get("analysis")
+            if analysis_payload:
+                score = int(jsonable_encoder(analysis_payload).get("score", 0))
+                record_round_score(int(user_id), "hr", score)
             reset_flow_state(str(user_id))
             return JSONResponse(
                 {

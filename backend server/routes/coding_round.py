@@ -3,6 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from services.db_client import supabase
 from services.questions import questions
 from services.redis import redis_client
+from services.leaderboard import record_round_score
 from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
 from models.coding_round import solution,analysis
 import random 
@@ -87,6 +88,7 @@ Return only structured output.
         response=structured_model.invoke(prompt)
         formatted_response=response.model_dump()
         set_round_state(str(user_id), "coding", "completed")
+        record_round_score(int(user_id), "coding", int(formatted_response.get("overall_score", 0)))
         return{"analysis": formatted_response}
     except HTTPException:
         raise
