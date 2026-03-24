@@ -7,6 +7,9 @@ export default function JobsPage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [buildingJobId, setBuildingJobId] = useState(null);
+  const [resumeByJob, setResumeByJob] = useState({});
+  const [selectedTemplateByJob, setSelectedTemplateByJob] = useState({});
 
   const normalizedKeyword = searchKeyword.trim().toLowerCase();
   const isJobExternal = (value) => value === true || value === 'true' || value === 1;
@@ -39,6 +42,52 @@ export default function JobsPage() {
 
     loadJobs();
   }, []);
+
+  const onBuildResume = async (job) => {
+    if (!job?.id) {
+      window.alert('Job id is missing. Unable to build resume right now.');
+      return;
+    }
+
+    setBuildingJobId(job.id);
+    try {
+      const { data } = await api.post('/jobs/build-resume', { job_id: job.id });
+      setResumeByJob((prev) => ({ ...prev, [job.id]: data }));
+      setSelectedTemplateByJob((prev) => ({
+        ...prev,
+        [job.id]: prev[job.id] || 'classic_elegant',
+      }));
+
+      const feasible = data?.resume?.feasible;
+      if (feasible === false) {
+        const reason = data?.resume?.feasibility_reason || 'This job is not feasible for your current profile/domain. Resume is generated for reference, but you may not have a strong ATS edge for this application.';
+        window.alert(`⚠️ Not Feasible for Your Profile\n\n${reason}`);
+      }
+    } catch (err) {
+      window.alert(apiError(err, 'Unable to build job-tailored resume'));
+    } finally {
+      setBuildingJobId(null);
+    }
+  };
+
+  const onDownloadResumeTemplate = (jobId) => {
+    const payload = resumeByJob[jobId];
+    if (!payload?.templates) return;
+
+    const selectedKey = selectedTemplateByJob[jobId] || 'classic_elegant';
+    const selected = payload.templates[selectedKey];
+    if (!selected?.html) return;
+
+    const blob = new Blob([selected.html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = selected.filename || `job_resume_${selectedKey}.html`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <section className="panel">
@@ -91,8 +140,13 @@ export default function JobsPage() {
                   >
                     Apply
                   </a>
-                  <button type="button" className="btn ghost">
-                    Build Resume
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => onBuildResume(job)}
+                    disabled={buildingJobId === job.id}
+                  >
+                    {buildingJobId === job.id ? 'Building...' : 'Build Resume'}
                   </button>
                 </div>
               ) : (
@@ -118,6 +172,36 @@ export default function JobsPage() {
                   >
                     Quick Apply
                   </button>
+                </div>
+              )}
+
+              {resumeByJob[job.id]?.templates && (
+                <div className="job-actions" style={{ marginTop: '0.5rem', alignItems: 'center' }}>
+                  <select
+                    className="select"
+                    value={selectedTemplateByJob[job.id] || 'classic_elegant'}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedTemplateByJob((prev) => ({ ...prev, [job.id]: value }));
+                    }}
+                  >
+                    {Object.entries(resumeByJob[job.id].templates).map(([key, value]) => (
+                      <option key={key} value={key}>{value?.label || key}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => onDownloadResumeTemplate(job.id)}
+                  >
+                    Download Resume
+                  </button>
+                </div>
+              )}
+
+              {resumeByJob[job.id]?.resume?.feasible === false && (
+                <div className="error-box" style={{ marginTop: '0.6rem' }}>
+                  ⚠️ Not Feasible for Your Profile: {resumeByJob[job.id]?.resume?.feasibility_reason || 'This job is opposite to your current domain. Resume is generated for reference, but your ATS edge is likely low.'}
                 </div>
               )}
             </article>

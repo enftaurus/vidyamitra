@@ -117,6 +117,8 @@ function ManageJobs() {
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [location, setLocation] = useState('');
+  const [description, setDescription] = useState('');
+  const [requiredMembers, setRequiredMembers] = useState('1');
   const [applyUrl, setApplyUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -139,15 +141,25 @@ function ManageJobs() {
 
   const handleAddJob = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !company.trim()) {
-      setError('Title and company are required');
+    const parsedRequiredMembers = Number(requiredMembers);
+    if (!title.trim() || !company.trim() || !description.trim()) {
+      setError('Title, company, and description are required');
+      return;
+    }
+    if (!Number.isInteger(parsedRequiredMembers) || parsedRequiredMembers < 1) {
+      setError('Required members must be at least 1');
       return;
     }
     setSubmitting(true);
     setError('');
     setSuccess('');
     try {
-      const payload = { title: title.trim(), company: company.trim() };
+      const payload = {
+        title: title.trim(),
+        company: company.trim(),
+        description: description.trim(),
+        no_of_people: parsedRequiredMembers,
+      };
       if (location.trim()) payload.location = location.trim();
       if (applyUrl.trim()) payload.apply_url = applyUrl.trim();
       await api.post('/admin/jobs', payload);
@@ -155,6 +167,8 @@ function ManageJobs() {
       setTitle('');
       setCompany('');
       setLocation('');
+      setDescription('');
+      setRequiredMembers('1');
       setApplyUrl('');
       loadJobs();
     } catch (err) {
@@ -193,6 +207,26 @@ function ManageJobs() {
             <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Hyderabad" />
           </div>
           <div className="form-group">
+            <label>Required Members *</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={requiredMembers}
+              onChange={(e) => setRequiredMembers(e.target.value)}
+              placeholder="e.g. 5"
+            />
+          </div>
+          <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+            <label>Description *</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Write job description and responsibilities"
+              rows={4}
+            />
+          </div>
+          <div className="form-group">
             <label>Apply URL</label>
             <input type="url" value={applyUrl} onChange={(e) => setApplyUrl(e.target.value)} placeholder="https://..." />
           </div>
@@ -218,6 +252,8 @@ function ManageJobs() {
                 <h4>{job.title || 'Untitled'}</h4>
                 <p><strong>Company:</strong> {job.company || '-'}</p>
                 <p><strong>Location:</strong> {job.location || '-'}</p>
+                <p><strong>No. of People:</strong> {job.no_of_people ?? '-'}</p>
+                <p><strong>Description:</strong> {job.description || '-'}</p>
                 {job.apply_url && (
                   <a href={job.apply_url} target="_blank" rel="noreferrer" className="admin-job-link">
                     Apply Link ↗
