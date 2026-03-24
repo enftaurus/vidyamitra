@@ -17,7 +17,7 @@ api_key = os.getenv("RESUME_API")
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(hr_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
-MAX_QUESTIONS = 10
+MAX_QUESTIONS = 3
 
 
 def _single_question_text(text: str) -> str:
@@ -111,14 +111,14 @@ CANDIDATE PROFILE:
 {candidate_profile}
 
 INSTRUCTIONS:
-0. You have up to 10 total questions in this HR round.
+0. You have up to {MAX_QUESTIONS} total questions in this HR round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE probing HR question.
+2. Ask exactly ONE very high-level hard grilling HR question.
 3. Ask exactly ONE question.
 4. Focus on personality traits, communication, teamwork, ownership, adaptability, values, and behavior.
 5. Avoid deep technical questions.
 6. Do not give feedback or hints.
-7. Ask a behavioral question with clear wording but strong depth.
+7. Ask a behavioral question with clear wording but strong depth and pressure.
 8. Cover communication, ownership, teamwork, and role-fit against the candidate's listed skills/projects across the full round.
 9. Do NOT repeat any question from a previous round or session.
 """
@@ -153,9 +153,10 @@ RULES:
 5. The next question MUST be completely different from every question listed in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
 6. End if the interview quality is very poor or if question_number > {MAX_QUESTIONS}.
 7. Never ask more than {MAX_QUESTIONS} questions total.
-8. Every asked question must remain concise but challenging.
-9. Increase pressure when answers are vague; challenge inconsistencies.
-10. Over the round, validate role-fit against major skills/projects in the candidate profile.
+8. Every asked question must remain concise but highly challenging.
+9. Increase pressure when answers are vague; challenge inconsistencies directly.
+10. Every question should test maturity under pressure, accountability, and conflict judgment.
+11. Over the round, validate role-fit against major skills/projects in the candidate profile.
 
 If ending:
 - should_end = true

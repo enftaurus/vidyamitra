@@ -22,7 +22,7 @@ api_key = os.getenv("RESUME_API")
 model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
 structured_model = model.with_structured_output(manager_model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
-MAX_QUESTIONS = 10
+MAX_QUESTIONS = 3
 
 
 def _single_question_text(text: str) -> str:
@@ -117,12 +117,12 @@ CANDIDATE PROFILE:
 {candidate_profile}
 
 INSTRUCTIONS:
-0. You have up to 10 total questions in this manager round.
+0. You have up to {MAX_QUESTIONS} total questions in this manager round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE demanding manager question.
+2. Ask exactly ONE very high-level hard grilling manager question.
 3. Ask exactly ONE question.
 4. The first question must be project-focused (project ownership, design choices, tradeoffs, impact).
-5. Keep the question practical, rigorous, and managerial.
+5. Keep the question practical, rigorous, managerial, and high-pressure.
 6. Across this round, cover major project and skill themes mentioned in the candidate profile.
 7. Do not provide feedback or hints.
 8. Do NOT repeat any question from a previous round or session.
@@ -157,7 +157,8 @@ RULES:
 7. Never ask more than {MAX_QUESTIONS} questions total.
 8. Every asked question must be concise but probing.
 9. Use escalating difficulty where appropriate and challenge weak reasoning directly.
-10. Cover major skills/projects from the candidate profile across the full round.
+10. Every question must feel like executive-level grilling on ownership, tradeoffs, and impact.
+11. Cover major skills/projects from the candidate profile across the full round.
 
 If ending:
 - should_end = true

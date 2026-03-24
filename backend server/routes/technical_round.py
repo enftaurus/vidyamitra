@@ -18,8 +18,8 @@ model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_ke
 structured_model = model.with_structured_output(model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
-MAX_QUESTIONS = 10
-MIN_CORE_TOPIC_QUESTIONS = 4
+MAX_QUESTIONS = 3
+MIN_CORE_TOPIC_QUESTIONS = 1
 
 
 def _single_question_text(text: str) -> str:
@@ -126,9 +126,9 @@ CANDIDATE PROFILE:
 {candidate_profile}
 ---------------------------
 INSTRUCTIONS:
-0. You have up to 10 total questions in this technical round.
+0. You have up to {MAX_QUESTIONS} total questions in this technical round.
 1. Do NOT greet. Do NOT add introduction.
-2. Ask exactly ONE technically challenging question.
+2. Ask exactly ONE very high-level, hard grilling technical question.
 3. Do NOT repeat any question from a previous round or session.
 4. Carefully analyze the resume and identify:
    - Core programming languages
@@ -136,7 +136,8 @@ INSTRUCTIONS:
    - Notable projects
    - Areas of claimed expertise
 4. Start with a foundational but probing question related to one of the candidate's claimed skills.
-5. Plan coverage so major skills listed in the candidate profile are tested across the full round.
+5. Plan coverage so major skills listed in the candidate profile are tested within only {MAX_QUESTIONS} questions.
+6. The question must test deep reasoning, tradeoffs, edge cases, and system-level thinking.
 6. Do NOT evaluate or score anything yet.
 7. Keep tone strict, direct, and interview-like.
 Avoid:
@@ -158,7 +159,7 @@ Generate:
         remaining_questions = MAX_QUESTIONS - len(qa)
         remaining_core_needed = max(0, MIN_CORE_TOPIC_QUESTIONS - core_topic_questions_asked)
         force_core_topic = remaining_core_needed > 0 and (
-            question_number in (3, 6, 9) or remaining_questions <= remaining_core_needed
+            question_number in (2, 3) or remaining_questions <= remaining_core_needed
         )
         forced_topic = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)] if force_core_topic else ""
 
@@ -189,7 +190,7 @@ Your Responsibilities:
    - End interview
 4. Decide whether the interview should end.
 5. If continuing, generate the next question.
-6. You have up to 10 total questions in this round, so increase pressure and depth as performance allows.
+6. You have up to {MAX_QUESTIONS} total questions in this round, so keep every question high-level and hard.
 7. Ensure broad coverage of major skills claimed in the candidate profile.
 ==============================
 DIFFICULTY RULES:
@@ -203,7 +204,7 @@ should_end = true
 ==============================
 STOP RULES:
 - If question_number > {MAX_QUESTIONS} → must end interview immediately.
-- Never exceed 10 total questions in this round.
+- Never exceed {MAX_QUESTIONS} total questions in this round.
 - Do NOT randomly end interview without performance reason.
 If ending interview:
 - should_end = true
@@ -211,7 +212,7 @@ If ending interview:
 - action = "end_interview"
 If continuing:
 - should_end = false
-- Generate exactly ONE challenging next technical question.
+- Generate exactly ONE high-level, hard grilling next technical question.
 - The question MUST be different from every question in PREVIOUS QUESTIONS AND ANSWERS. Never repeat or rephrase an already-asked question.
 - Keep it clear, rigorous, and probing.
 - Do NOT give feedback.
@@ -235,7 +236,7 @@ Return only structured output.
             topic_to_cover = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)]
             forced_prompt = f"""
 You are a strict technical interviewer.
-Ask exactly one short basic interview question on {topic_to_cover}.
+Ask exactly one high-level hard technical interview question on {topic_to_cover}.
 Do not give feedback. Do not ask multiple questions. Output only the question text.
 """
             forced_response = model.invoke([HumanMessage(content=forced_prompt)])

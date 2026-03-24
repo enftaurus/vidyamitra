@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from services.db_client import supabase
 
@@ -10,7 +10,8 @@ class JobCreate(BaseModel):
     title: str
     company: str
     location: Optional[str] = None
-    description: Optional[str] = None
+    description: str
+    no_of_people: int = Field(..., ge=1)
     job_role: Optional[str] = None
     apply_url: Optional[str] = None
     is_external: Optional[bool] = False
