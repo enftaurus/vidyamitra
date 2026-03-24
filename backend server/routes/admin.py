@@ -10,7 +10,10 @@ class JobCreate(BaseModel):
     title: str
     company: str
     location: Optional[str] = None
+    description: Optional[str] = None
+    job_role: Optional[str] = None
     apply_url: Optional[str] = None
+    is_external: Optional[bool] = False
 
 
 @router.get("/users")

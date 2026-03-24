@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api, apiError } from '../api';
 import { setRoundStatus } from '../roundStatus';
-import { fetchInterviewFlowStatus, getNextAllowedRound, ROUND_ROUTES } from '../interviewFlow';
+import { fetchInterviewFlowStatus, getNextAllowedRound, isInterviewUnlocked, markInterviewRoundStarted, ROUND_ROUTES } from '../interviewFlow';
 import { stopAllAudioPlayback } from '../audioControl';
 
 const languageTemplates = {
@@ -65,6 +65,7 @@ export default function CodingRoundPage() {
   const [error, setError] = useState('');
   const [startedAt, setStartedAt] = useState(null);
   const [blockedRoute, setBlockedRoute] = useState('');
+  const [blockedMessage, setBlockedMessage] = useState('');
   const [editorMode, setEditorMode] = useState('monaco');
   const [uiTheme, setUiTheme] = useState('dark');
   const [suggestions, setSuggestions] = useState([]);
@@ -205,10 +206,19 @@ export default function CodingRoundPage() {
   useEffect(() => {
     const init = async () => {
       try {
+        if (!isInterviewUnlocked()) {
+          setBlockedRoute('/jobs');
+          setBlockedMessage('Interview is locked. Click Quick Apply from Jobs page to unlock interviews.');
+          return;
+        }
+
+        markInterviewRoundStarted();
+
         const status = await fetchInterviewFlowStatus();
         const next = getNextAllowedRound(status);
         if (next !== 'coding') {
           setBlockedRoute(ROUND_ROUTES[next] || '/interview');
+          setBlockedMessage('Coding round is already completed. Continue with the next unlocked round.');
           return;
         }
         fetchQuestion();
@@ -410,7 +420,7 @@ export default function CodingRoundPage() {
     return (
       <section className="panel">
         <h2>Coding Round</h2>
-        <div className="hint">Coding round is already completed. Continue with the next unlocked round.</div>
+        <div className="hint">{blockedMessage || 'Round is currently locked.'}</div>
         <Link className="btn" to={blockedRoute}>Go to next allowed round</Link>
       </section>
     );

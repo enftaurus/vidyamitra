@@ -2,7 +2,7 @@ import InterviewConsole from '../components/InterviewConsole';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, apiError } from '../api';
-import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, ROUND_ROUTES } from '../interviewFlow';
+import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, markInterviewRoundStarted, ROUND_ROUTES } from '../interviewFlow';
 import { stopAllAudioPlayback } from '../audioControl';
 
 export default function InterviewPage({ title, basePath, roundKey }) {
@@ -58,7 +58,11 @@ export default function InterviewPage({ title, basePath, roundKey }) {
         const status = await fetchInterviewFlowStatus();
         const nextRound = getNextAllowedRound(status);
         setNextRoute(ROUND_ROUTES[nextRound] || '/interview');
-        setLocked(isRoundLocked(status, roundKey));
+        const roundLocked = isRoundLocked(status, roundKey);
+        setLocked(roundLocked);
+        if (!roundLocked) {
+          markInterviewRoundStarted();
+        }
       } catch (err) {
         setFatalError(apiError(err, 'Unable to verify round access'));
       } finally {

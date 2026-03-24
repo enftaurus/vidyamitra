@@ -902,6 +902,23 @@ body {
   font-size: 0.88rem;
 }
 
+.job-card-enhanced {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.job-actions {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.job-source {
+  margin: 0;
+}
+
 .roadmap-list {
   margin-top: 0.55rem;
   display: grid;

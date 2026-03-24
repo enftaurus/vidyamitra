@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, apiError } from '../api';
+import { setInterviewUnlocked } from '../interviewFlow';
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
@@ -8,10 +9,12 @@ export default function JobsPage() {
   const [error, setError] = useState('');
 
   const normalizedKeyword = searchKeyword.trim().toLowerCase();
+  const isJobExternal = (value) => value === true || value === 'true' || value === 1;
+
   const filteredJobs = jobs.filter((job) => {
     if (!normalizedKeyword) return true;
 
-    const haystack = [job.title, job.company, job.location]
+    const haystack = [job.title, job.company, job.location, job.description]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();
@@ -69,16 +72,43 @@ export default function JobsPage() {
       ) : (
         <div className="jobs-grid">
           {filteredJobs.map((job, index) => (
-            <article key={job.id ?? `${job.title || 'job'}-${index}`} className="job-card">
+            <article key={job.id ?? `${job.title || 'job'}-${index}`} className="job-card job-card-enhanced">
               <h4>{job.title || 'Untitled Role'}</h4>
               <p><strong>Company:</strong> {job.company || '-'}</p>
               <p><strong>Location:</strong> {job.location || '-'}</p>
-              {job.apply_url ? (
-                <a className="btn ghost" href={job.apply_url} target="_blank" rel="noreferrer" style={{ marginTop: '0.55rem', display: 'inline-block' }}>
-                  Apply Now
-                </a>
+              <p><strong>Description:</strong> {job.description || '-'}</p>
+
+              {isJobExternal(job.is_external) ? (
+                <div className="job-actions">
+                  <a
+                    className="btn ghost"
+                    href={job.apply_url || '#'}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => {
+                      if (!job.apply_url) e.preventDefault();
+                    }}
+                  >
+                    Apply
+                  </a>
+                  <button type="button" className="btn ghost">
+                    Build Resume
+                  </button>
+                </div>
               ) : (
-                <p><strong>Apply:</strong> Not available</p>
+                <div className="job-actions">
+                  <p className="job-source"><strong>Source:</strong> Vidyamitra</p>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    onClick={() => {
+                      setInterviewUnlocked(true);
+                      window.alert('Quick Apply submitted. Interview rounds are unlocked for 5 minutes. Start any round within 5 minutes to keep access.');
+                    }}
+                  >
+                    Quick Apply
+                  </button>
+                </div>
               )}
             </article>
           ))}
