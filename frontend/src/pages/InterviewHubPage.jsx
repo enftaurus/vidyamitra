@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, apiError } from '../api';
-import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, toUiStatus } from '../interviewFlow';
+import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, toUiStatus, isInterviewUnlocked, getActiveJob, clearActiveJob } from '../interviewFlow';
 import { clearRoundStatus } from '../roundStatus';
 import DynamicHeadline from '../components/DynamicHeadline';
 import MarqueeText from '../components/MarqueeText';
@@ -22,6 +22,8 @@ export default function InterviewHubPage() {
   });
   const [error, setError] = useState('');
   const [cycleClosed, setCycleClosed] = useState(false);
+  const [activeJob, setActiveJob] = useState(null);
+  const unlocked = isInterviewUnlocked();
 
   const loadStatus = async () => {
     try {
@@ -34,6 +36,7 @@ export default function InterviewHubPage() {
 
   useEffect(() => {
     setCycleClosed(localStorage.getItem('interview_cycle_closed') === 'true');
+    setActiveJob(getActiveJob());
     loadStatus();
   }, []);
 
@@ -42,6 +45,8 @@ export default function InterviewHubPage() {
     try {
       await api.post('/interview_flow/reset');
       clearRoundStatus();
+      clearActiveJob();
+      setActiveJob(null);
       localStorage.removeItem('interview_cycle_closed');
       setCycleClosed(false);
       setError('');
@@ -55,6 +60,8 @@ export default function InterviewHubPage() {
     try {
       await api.post('/interview_flow/reset');
       clearRoundStatus();
+      clearActiveJob();
+      setActiveJob(null);
       localStorage.removeItem('interview_cycle_closed');
       setCycleClosed(false);
       setError('');
@@ -70,6 +77,59 @@ export default function InterviewHubPage() {
 
   return (
     <section className="panel">
+      {/* Locked Banner */}
+      {!unlocked && (
+        <div className="hint" style={{
+          background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+          border: '1px solid #334155',
+          borderRadius: '12px',
+          padding: '1.5rem',
+          textAlign: 'center',
+          marginBottom: '1.5rem',
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔒</div>
+          <h3 style={{ margin: '0 0 0.35rem', color: '#e2e8f0' }}>Interview Locked</h3>
+          <p style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+            Go to the <strong>Jobs</strong> page and click <strong>Quick Apply</strong> on a Vidyamitra job to unlock your interview rounds.
+          </p>
+          <Link className="btn" to="/jobs">Browse Jobs →</Link>
+        </div>
+      )}
+
+      {/* Active Job Banner */}
+      {unlocked && activeJob && (
+        <div style={{
+          background: 'linear-gradient(135deg, #6366f115, #818cf815)',
+          border: '1px solid #6366f140',
+          borderRadius: '12px',
+          padding: '1rem 1.25rem',
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '1.5rem' }}>🎯</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '0.95rem' }}>
+              Interviewing for: {activeJob.title || 'Unknown Role'}
+            </div>
+            <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '0.15rem' }}>
+              {[activeJob.company, activeJob.location].filter(Boolean).join(' · ')}
+            </div>
+          </div>
+          <span style={{
+            background: '#22c55e20',
+            border: '1px solid #22c55e40',
+            borderRadius: '999px',
+            padding: '0.2rem 0.7rem',
+            fontSize: '0.75rem',
+            color: '#86efac',
+            fontWeight: 600,
+          }}>Active</span>
+        </div>
+      )}
+
       <div className="panel-header between">
         <div>
           <DynamicHeadline
@@ -143,6 +203,9 @@ export default function InterviewHubPage() {
           );
         })}
       </div>
+
+
+
       {cycleClosed && (
         <div style={{ marginTop: '0.8rem' }}>
           <Link className="btn" to="/interview/coding" onClick={onStartNewCycle}>

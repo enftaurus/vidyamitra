@@ -11,11 +11,9 @@ const links = [
   { to: '/job-market', label: 'Job Market' },
   { to: '/domain-switch', label: 'Domain Switch' },
   { to: '/interview', label: 'Interview Hub' },
-  { to: '/interview/coding', label: 'Coding' },
-  { to: '/interview/technical', label: 'Technical' },
-  { to: '/interview/manager', label: 'Manager' },
-  { to: '/interview/hr', label: 'HR' },
+  { to: '/mock', label: 'Mock Interview' },
   { to: '/skill-quiz', label: 'Skill Quiz' },
+  { to: '/roadmap', label: '🗺 Roadmap' },
 ];
 
 export default function Layout({ children }) {

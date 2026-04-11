@@ -89,7 +89,7 @@ const speakText = (text, selectedVoice, rate = 1, pitch = 1, language = 'en-US')
   });
 };
 
-export default function InterviewConsole({ title, basePath, roundKey }) {
+export default function InterviewConsole({ title, basePath, roundKey, mockMode = false, nextRoundOverride = null, nextRoundLabel = 'Proceed to Next Round' }) {
   const [question, setQuestion] = useState('');
   const [questionNumber, setQuestionNumber] = useState(0);
   const [answer, setAnswer] = useState('');
@@ -167,7 +167,7 @@ export default function InterviewConsole({ title, basePath, roundKey }) {
     [isStarted, isEnded, answer, loading]
   );
 
-  const nextRoundRoute = useMemo(() => nextRoundRouteByKey[roundKey] || '/interview', [roundKey]);
+  const nextRoundRoute = useMemo(() => nextRoundOverride || nextRoundRouteByKey[roundKey] || '/interview', [roundKey, nextRoundOverride]);
 
   const clearRevealTimer = () => {
     if (revealTimerRef.current) {
@@ -450,32 +450,44 @@ export default function InterviewConsole({ title, basePath, roundKey }) {
             <div className="result-card">
               <h3>Round Completed</h3>
               <p>{closingNote}</p>
-              {analysis && (
+              {mockMode && analysis && (
                 <div className="analysis-grid">
-                  <div>
-                    <strong>Score:</strong> {analysis.score}
+                  <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--surface-alt, #f8f9fa)', borderRadius: '8px' }}>
+                    <strong>📊 Overall Analysis</strong>
+                    <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{analysis.analysis}</p>
                   </div>
-                  <div>
-                    <strong>Analysis:</strong> {analysis.analysis}
+                  <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--surface-alt, #f8f9fa)', borderRadius: '8px' }}>
+                    <strong>💡 Improvement Tips</strong>
+                    <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{analysis.tips}</p>
                   </div>
-                  <div>
-                    <strong>Tips:</strong> {analysis.tips}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div style={{ padding: '0.75rem', background: '#dcfce7', borderRadius: '8px' }}>
+                      <strong>✅ Strengths</strong>
+                      <ul style={{ marginTop: '0.4rem', paddingLeft: '1.2rem' }}>
+                        {(analysis.strengths || []).map((s, i) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </div>
+                    <div style={{ padding: '0.75rem', background: '#fef2f2', borderRadius: '8px' }}>
+                      <strong>⚠️ Weaknesses</strong>
+                      <ul style={{ marginTop: '0.4rem', paddingLeft: '1.2rem' }}>
+                        {(analysis.weaknesses || []).map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
                   </div>
-                  <div>
-                    <strong>Strengths:</strong> {(analysis.strengths || []).join(', ')}
+                  <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#eff6ff', borderRadius: '8px' }}>
+                    <strong>📚 Areas to Focus On</strong>
+                    <ul style={{ marginTop: '0.4rem', paddingLeft: '1.2rem' }}>
+                      {(analysis.areas_to_focus_on || []).map((a, i) => <li key={i}>{a}</li>)}
+                    </ul>
                   </div>
-                  <div>
-                    <strong>Weaknesses:</strong> {(analysis.weaknesses || []).join(', ')}
-                  </div>
-                  <div>
-                    <strong>Areas To Focus:</strong>{' '}
-                    {(analysis.areas_to_focus_on || []).join(', ')}
+                  <div style={{ marginTop: '0.75rem', padding: '0.6rem 0.9rem', background: '#f1f5f9', borderRadius: '8px', textAlign: 'center' }}>
+                    <strong>Score: {analysis.score} / 100</strong>
                   </div>
                 </div>
               )}
               <div style={{ marginTop: '0.8rem' }}>
                 <Link className="btn" to={nextRoundRoute}>
-                  Proceed to Next Round
+                  {nextRoundLabel}
                 </Link>
               </div>
             </div>

@@ -4,7 +4,6 @@ import { api, apiError } from '../api';
 const TOTAL_TIME = 10 * 60; // 10 minutes in seconds
 
 export default function SkillQuizPage() {
-  const [userId, setUserId] = useState('');
   const [phase, setPhase] = useState('start'); // start | quiz | submitting | result
   const [questions, setQuestions] = useState([]);
   const [answerKey, setAnswerKey] = useState({});
@@ -17,12 +16,6 @@ export default function SkillQuizPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const timerRef = useRef(null);
-
-  // Auto-detect user_id from sessionStorage
-  useEffect(() => {
-    const stored = sessionStorage.getItem('user_id') || localStorage.getItem('user_id') || '';
-    if (stored) setUserId(stored);
-  }, []);
 
   // Timer countdown
   useEffect(() => {
@@ -47,11 +40,10 @@ export default function SkillQuizPage() {
   };
 
   const fetchQuiz = async () => {
-    if (!userId) { setError('Please enter your User ID'); return; }
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.get(`/skill-quiz/questions/${userId}`);
+      const { data } = await api.get('/skill-quiz/questions');
       setQuestions(data.questions || []);
       setAnswerKey(data._answer_key || {});
       setUserSkills(data.user_skills || []);
@@ -77,7 +69,6 @@ export default function SkillQuizPage() {
     setError('');
     try {
       const payload = {
-        user_id: Number(userId),
         questions: questions.map((q) => ({
           ...q,
           user_answer: answers[q.id] || '',
@@ -113,14 +104,7 @@ export default function SkillQuizPage() {
             You'll have <strong>10 minutes</strong> to complete the quiz. Results
             are analyzed by AI for detailed feedback.
           </p>
-          <div className="quiz-start-input-row">
-            <input
-              type="text"
-              placeholder="Your User ID"
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="quiz-uid-input"
-            />
+          <div className="quiz-start-input-row" style={{ justifyContent: 'center' }}>
             <button className="btn primary" onClick={fetchQuiz} disabled={loading}>
               {loading ? 'Loading...' : 'Start Quiz →'}
             </button>

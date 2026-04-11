@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, apiError } from '../api';
-import { setInterviewUnlocked } from '../interviewFlow';
+import { setInterviewUnlocked, setActiveJob } from '../interviewFlow';
 
 export default function JobsPage() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [loading, setLoading] = useState(true);
@@ -162,9 +164,10 @@ export default function JobsPage() {
                       }
 
                       try {
-                        await api.post('/jobs/quick-apply', { job_id: job.id });
+                        const { data } = await api.post('/jobs/quick-apply', { job_id: job.id });
                         setInterviewUnlocked(true);
-                        window.alert('Quick Apply submitted. Interview rounds are unlocked for 5 minutes. Start any round within 5 minutes to keep access.');
+                        setActiveJob(data?.job || { id: job.id, title: job.title, company: job.company, location: job.location, description: job.description });
+                        navigate('/interview');
                       } catch (err) {
                         window.alert(apiError(err, 'Unable to submit quick apply'));
                       }

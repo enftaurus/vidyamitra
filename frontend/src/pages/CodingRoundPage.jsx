@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api, apiError } from '../api';
 import { setRoundStatus } from '../roundStatus';
-import { fetchInterviewFlowStatus, getNextAllowedRound, isInterviewUnlocked, markInterviewRoundStarted, ROUND_ROUTES } from '../interviewFlow';
+import { fetchInterviewFlowStatus, getNextAllowedRound, isInterviewUnlocked, markInterviewRoundStarted, ROUND_ROUTES, getActiveJob } from '../interviewFlow';
 import { stopAllAudioPlayback } from '../audioControl';
 
 const languageTemplates = {
@@ -53,7 +53,9 @@ const hasValidQuestionShape = (question) => (
   && typeof question.problem_statement === 'string'
 );
 
-export default function CodingRoundPage() {
+export default function CodingRoundPage({ mockMode = false }) {
+  const [searchParams] = useSearchParams();
+  const proctored = searchParams.get('proctored') === 'true';
   const navigate = useNavigate();
   const [question, setQuestion] = useState(null);
   const [language, setLanguage] = useState('python');
@@ -130,6 +132,7 @@ export default function CodingRoundPage() {
   }, []);
 
   useEffect(() => {
+
     const onFullscreenChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
@@ -152,6 +155,7 @@ export default function CodingRoundPage() {
   }, []);
 
   useEffect(() => {
+
     const onKeyDown = (event) => {
       const key = (event.key || '').toLowerCase();
       if ((event.ctrlKey || event.metaKey) && (key === 'c' || key === 'v')) {
@@ -181,21 +185,28 @@ export default function CodingRoundPage() {
     return Math.max(1, Math.round((Date.now() - startedAt) / 1000));
   }, [startedAt, submitting]);
 
+  const questionEndpoint = mockMode ? '/mock/coding/get_question' : '/coding_round/get_question';
+  const submitEndpoint = mockMode ? '/mock/coding/submit_solution' : '/coding_round/submit_solution';
+
   const fetchQuestion = async () => {
     setLoadingQuestion(true);
     setError('');
     try {
-      const { data } = await api.get('/coding_round/get_question');
+      const { data } = await api.get(questionEndpoint);
       const nextQuestion = data?.question;
       if (!hasValidQuestionShape(nextQuestion)) {
         throw new Error('Invalid question payload received from server');
       }
-      localStorage.removeItem('interview_cycle_closed');
+      if (true) {
+        localStorage.removeItem('interview_cycle_closed');
+      }
       setQuestion(nextQuestion);
       setStartedAt(Date.now());
       setResult(null);
       setHasSubmitted(false);
-      setRoundStatus('coding', 'In Progress');
+      if (true) {
+        setRoundStatus('coding', 'In Progress');
+      }
     } catch (err) {
       setError(apiError(err, 'Unable to load coding question'));
     } finally {
@@ -206,6 +217,12 @@ export default function CodingRoundPage() {
   useEffect(() => {
     const init = async () => {
       try {
+        if (mockMode) {
+          // Mock mode: no lock checks, fetch immediately
+          fetchQuestion();
+          return;
+        }
+
         if (!isInterviewUnlocked()) {
           setBlockedRoute('/jobs');
           setBlockedMessage('Interview is locked. Click Quick Apply from Jobs page to unlock interviews.');
@@ -228,9 +245,10 @@ export default function CodingRoundPage() {
     };
 
     init();
-  }, []);
+  }, [mockMode]);
 
   useEffect(() => {
+
     const handleViolation = async () => {
       if (!isFullscreen || !question || hasSubmitted || submitting) return;
       const now = Date.now();
@@ -248,9 +266,14 @@ export default function CodingRoundPage() {
       handlingViolationRef.current = true;
 
       try {
-        await forceResetAllRounds('Second tab-switch violation detected. All rounds were reset. Redirecting to Interview Hub...');
+        if (!mockMode || proctored) {
+          await forceResetAllRounds('Second tab-switch violation detected. All rounds were reset. Redirecting to Interview Hub...');
+        } else {
+          setError('Second tab-switch violation detected. Keep focused on the editor.');
+          handlingViolationRef.current = false;
+        }
       } finally {
-        handlingViolationRef.current = false;
+        if (!mockMode || proctored) handlingViolationRef.current = false;
       }
     };
 
@@ -268,7 +291,7 @@ export default function CodingRoundPage() {
   }, [code, language, timeTaken, hasSubmitted, navigate, isFullscreen, question, submitting]);
 
   useEffect(() => {
-    if (!isFullscreen || blockedRoute || hasSubmitted || submitting) return undefined;
+    if ((!isFullscreen && (!mockMode || proctored)) || blockedRoute || hasSubmitted || submitting) return undefined;
 
     let cancelled = false;
 
@@ -362,7 +385,11 @@ export default function CodingRoundPage() {
             setProctorWarnings(warningNo);
 
             if (warningNo >= MAX_PROCTOR_WARNINGS) {
-              await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (multiple faces). Interview terminated and all rounds reset.`);
+              if (!mockMode) {
+                await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (multiple faces). Interview terminated and all rounds reset.`);
+              } else {
+                setError(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (multiple faces).`);
+              }
               return;
             }
 
@@ -416,7 +443,7 @@ export default function CodingRoundPage() {
     }
   };
 
-  if (blockedRoute) {
+  if (!mockMode && blockedRoute) {
     return (
       <section className="panel">
         <h2>Coding Round</h2>
@@ -426,7 +453,7 @@ export default function CodingRoundPage() {
     );
   }
 
-  if (!isFullscreen) {
+  if ((!mockMode || proctored) && !isFullscreen) {
     return (
       <section className="panel">
         <h2>Coding Round</h2>
@@ -602,7 +629,7 @@ export default function CodingRoundPage() {
     setError('');
 
     try {
-      const { data } = await api.post('/coding_round/submit_solution', {
+      const { data } = await api.post(submitEndpoint, {
         code: code.trim() ? code : '# Auto-submitted due to tab switching violation',
         language,
         time_taken: timeTaken,
@@ -610,7 +637,9 @@ export default function CodingRoundPage() {
       const analysis = data.analysis || null;
       setResult(analysis);
       setHasSubmitted(true);
-      setRoundStatus('coding', 'Completed');
+      if (true) {
+        setRoundStatus('coding', 'Completed');
+      }
       setShowSubmitPrompt(false);
     } catch (err) {
       setError(apiError(err, 'Unable to evaluate solution'));
@@ -629,29 +658,49 @@ export default function CodingRoundPage() {
 
   return (
     <section className="panel">
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        style={{
-          position: 'fixed',
-          right: '1rem',
-          bottom: '1rem',
-          width: '220px',
-          maxWidth: '32vw',
-          borderRadius: '12px',
-          border: '1px solid #d6dfef',
-          background: '#000',
-          boxShadow: '0 10px 26px rgba(25, 34, 54, 0.2)',
-          zIndex: 60,
-        }}
-      />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      {true && (
+        <>
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            style={{
+              position: 'fixed',
+              right: '1rem',
+              bottom: '1rem',
+              width: '220px',
+              maxWidth: '32vw',
+              borderRadius: '12px',
+              border: '1px solid #d6dfef',
+              background: '#000',
+              boxShadow: '0 10px 26px rgba(25, 34, 54, 0.2)',
+              zIndex: 60,
+            }}
+          />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </>
+      )}
       <div className="panel-header between">
         <div>
           <h2>Coding Round</h2>
-          <p className="muted">Solve the problem and submit for evaluation</p>
+          <p className="muted">
+            Solve the problem and submit for evaluation
+          </p>
+          {(() => {
+            const activeJob = getActiveJob();
+            if (!activeJob) return null;
+            return (
+              <div style={{
+                background: '#6366f110', border: '1px solid #6366f130',
+                borderRadius: '8px', padding: '0.45rem 0.75rem', marginTop: '0.5rem',
+                fontSize: '0.82rem', color: '#a5b4fc', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+              }}>
+                🎯 <strong>{activeJob.title}</strong>
+                {activeJob.company && <span style={{ color: '#94a3b8' }}>at {activeJob.company}</span>}
+              </div>
+            );
+          })()}
         </div>
         <div className="coding-actions">
           <button className="btn ghost" onClick={fetchQuestion} disabled={loadingQuestion}>
@@ -660,22 +709,26 @@ export default function CodingRoundPage() {
         </div>
       </div>
 
-      <div className="hint" style={{ marginBottom: '0.65rem' }}>
-        <strong>Webcam Proctoring:</strong>{' '}
-        {cameraError
-          ? cameraError
-          : cameraReady
-            ? `Active${typeof faceCount === 'number' ? ` • Faces detected: ${faceCount}` : ''}${detectorEngine ? ` • Detector: ${detectorEngine}` : ''}`
-            : 'Starting camera...'}
-      </div>
-      {cameraReady && qualityHint && (
-        <div className="hint" style={{ marginBottom: '0.65rem' }}>
-          <strong>Camera Quality:</strong> {qualityHint}
-        </div>
+      {true && (
+        <>
+          <div className="hint" style={{ marginBottom: '0.65rem' }}>
+            <strong>Webcam Proctoring:</strong>{' '}
+            {cameraError
+              ? cameraError
+              : cameraReady
+                ? `Active${typeof faceCount === 'number' ? ` • Faces detected: ${faceCount}` : ''}${detectorEngine ? ` • Detector: ${detectorEngine}` : ''}`
+                : 'Starting camera...'}
+          </div>
+          {cameraReady && qualityHint && (
+            <div className="hint" style={{ marginBottom: '0.65rem' }}>
+              <strong>Camera Quality:</strong> {qualityHint}
+            </div>
+          )}
+          <div className="hint" style={{ marginBottom: '0.65rem' }}>
+            <strong>Proctoring warnings:</strong> {proctorWarnings}/{MAX_PROCTOR_WARNINGS} used • {Math.max(0, MAX_PROCTOR_WARNINGS - proctorWarnings)} left
+          </div>
+        </>
       )}
-      <div className="hint" style={{ marginBottom: '0.65rem' }}>
-        <strong>Proctoring warnings:</strong> {proctorWarnings}/{MAX_PROCTOR_WARNINGS} used • {Math.max(0, MAX_PROCTOR_WARNINGS - proctorWarnings)} left
-      </div>
 
       {!question && !loadingQuestion && (
         <div className="hint" style={{ marginBottom: '0.65rem' }}>
@@ -834,17 +887,47 @@ export default function CodingRoundPage() {
 
       {result && (
         <div className="result-card">
-          <h3>Evaluation Result</h3>
-          <p><strong>Score:</strong> {result.overall_score}/100</p>
-          <p><strong>Code Analysis:</strong> {result.code_analysis}</p>
-          <p><strong>Improvements:</strong> {result.solution_improvement}</p>
-          <p><strong>Tips:</strong> {result.tips_for_user}</p>
-          <p><strong>Overall:</strong> {result.overall_analysis}</p>
-          <div style={{ marginTop: '0.8rem' }}>
-            <Link className="btn" to="/interview/technical">
-              Proceed to Next Round
-            </Link>
-          </div>
+          <h3>{mockMode ? '🎓 Mock Coding Review' : 'Submission Complete'}</h3>
+          {mockMode ? (
+            <>
+              <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--surface-alt, #f8f9fa)', borderRadius: '8px' }}>
+                <strong>📊 Code Analysis</strong>
+                <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{result.code_analysis}</p>
+              </div>
+              <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: '#eff6ff', borderRadius: '8px' }}>
+                <strong>🔧 How to Improve Your Solution</strong>
+                <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{result.solution_improvement}</p>
+              </div>
+              <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: '#fefce8', borderRadius: '8px' }}>
+                <strong>💡 Tips to Practice</strong>
+                <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{result.tips_for_user}</p>
+              </div>
+              <div style={{ marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--surface-alt, #f8f9fa)', borderRadius: '8px' }}>
+                <strong>🔍 Overall Assessment</strong>
+                <p style={{ marginTop: '0.4rem', whiteSpace: 'pre-wrap' }}>{result.overall_analysis}</p>
+              </div>
+              <div style={{ padding: '0.6rem 0.9rem', background: '#f1f5f9', borderRadius: '8px', textAlign: 'center', marginBottom: '0.8rem' }}>
+                <strong>Score: {result.overall_score} / 100</strong>
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button className="btn ghost" onClick={fetchQuestion}>
+                  Try Another Question
+                </button>
+                <Link className="btn" to={`/mock/technical${proctored ? '?proctored=true' : ''}`}>
+                  Next: Mock Technical Round
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted">Your solution has been submitted and evaluated. Continue to the next round.</p>
+              <div style={{ marginTop: '0.8rem' }}>
+                <Link className="btn" to="/interview/technical">
+                  Proceed to Next Round
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       )}
 

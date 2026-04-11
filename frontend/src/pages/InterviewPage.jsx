@@ -5,7 +5,17 @@ import { api, apiError } from '../api';
 import { fetchInterviewFlowStatus, getNextAllowedRound, isRoundLocked, markInterviewRoundStarted, ROUND_ROUTES } from '../interviewFlow';
 import { stopAllAudioPlayback } from '../audioControl';
 
-export default function InterviewPage({ title, basePath, roundKey }) {
+import { useSearchParams } from 'react-router-dom';
+
+const nextMockRoundRouteByKey = {
+  technical: '/mock/manager',
+  manager: '/mock/hr',
+  hr: '/mock',
+};
+
+export default function InterviewPage({ title, basePath, roundKey, mockMode = false }) {
+  const [searchParams] = useSearchParams();
+  const proctored = searchParams.get('proctored') === 'true';
   const navigate = useNavigate();
   const [locked, setLocked] = useState(false);
   const [nextRoute, setNextRoute] = useState('/interview');
@@ -54,6 +64,13 @@ export default function InterviewPage({ title, basePath, roundKey }) {
 
   useEffect(() => {
     const run = async () => {
+      if (mockMode) {
+        setNextRoute(nextMockRoundRouteByKey[roundKey] || '/mock');
+        setLocked(false);
+        setLoading(false);
+        return;
+      }
+
       try {
         const status = await fetchInterviewFlowStatus();
         const nextRound = getNextAllowedRound(status);
@@ -71,7 +88,7 @@ export default function InterviewPage({ title, basePath, roundKey }) {
     };
 
     run();
-  }, [roundKey]);
+  }, [roundKey, mockMode]);
 
   useEffect(() => {
     const onFullscreenChange = () => {
@@ -138,9 +155,14 @@ export default function InterviewPage({ title, basePath, roundKey }) {
       handlingViolationRef.current = true;
 
       try {
-        await forceResetAllRounds('Second violation detected. All rounds were reset. Redirecting to Interview Hub...');
+        if (!mockMode) {
+          await forceResetAllRounds('Second violation detected. All rounds were reset. Redirecting to Interview Hub...');
+        } else {
+          setError('Second violation detected. Keep focused on the interview.');
+          handlingViolationRef.current = false;
+        }
       } finally {
-        handlingViolationRef.current = false;
+        if (!mockMode) handlingViolationRef.current = false;
       }
     };
 
@@ -245,7 +267,11 @@ export default function InterviewPage({ title, basePath, roundKey }) {
             setProctorWarnings(warningNo);
 
             if (warningNo >= MAX_PROCTOR_WARNINGS) {
-              await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (no face/multiple faces). Interview terminated and all rounds reset.`);
+              if (!mockMode) {
+                await forceResetAllRounds(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times (no face/multiple faces). Interview terminated and all rounds reset.`);
+              } else {
+                setError(`Proctoring rule violated ${MAX_PROCTOR_WARNINGS} times. Keep exactly one face visible.`);
+              }
               return;
             }
 
@@ -317,6 +343,35 @@ export default function InterviewPage({ title, basePath, roundKey }) {
     );
   }
 
+  if (mockMode && !proctored) {
+    return (
+      <>
+        <section className="panel" style={{ borderTop: '3px solid #6366f1', marginBottom: '0.5rem' }}>
+          <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>🎭</span>
+            <span>
+              <strong>Mock Mode Active</strong> — No proctoring, no locks, no fullscreen required.
+              You will receive detailed AI coaching analysis when the round ends.
+            </span>
+          </div>
+          <div style={{ marginTop: '0.5rem' }}>
+            <Link className="btn ghost" to="/mock" style={{ fontSize: '0.85rem' }}>
+              ← Back to Mock Hub
+            </Link>
+          </div>
+        </section>
+        <InterviewConsole
+          title={title}
+          basePath={basePath}
+          roundKey={roundKey}
+          mockMode={mockMode}
+          nextRoundOverride={nextRoute}
+          nextRoundLabel="Next Mock Round"
+        />
+      </>
+    );
+  }
+
   if (!isFullscreen) {
     return (
       <section className="panel">
@@ -379,7 +434,24 @@ export default function InterviewPage({ title, basePath, roundKey }) {
           </div>
         </section>
       )}
-      <InterviewConsole title={title} basePath={basePath} roundKey={roundKey} />
+      {mockMode && (
+        <section className="panel" style={{ borderTop: '3px solid #6366f1', marginBottom: '0.5rem' }}>
+          <div className="hint" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>🎭</span>
+            <span>
+              <strong>Mock Mode Active (Proctored)</strong> — Full proctoring enabled for realism. Detailed AI feedback when you finish.
+            </span>
+          </div>
+        </section>
+      )}
+      <InterviewConsole
+        title={title}
+        basePath={basePath}
+        roundKey={roundKey}
+        mockMode={mockMode}
+        nextRoundOverride={mockMode ? (proctored ? `${nextRoute}?proctored=true` : nextRoute) : null}
+        nextRoundLabel={mockMode ? "Next Mock Round" : "Proceed to Next Round"}
+      />
       {error && <section className="panel"><div className="error-box">{error}</div></section>}
     </>
   );

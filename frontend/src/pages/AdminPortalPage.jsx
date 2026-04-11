@@ -113,6 +113,8 @@ function ManageJobs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [leaderboardByJob, setLeaderboardByJob] = useState({});
+  const [loadingLeaderboardJobId, setLoadingLeaderboardJobId] = useState(null);
 
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
@@ -132,6 +134,21 @@ function ManageJobs() {
       setError(apiError(err, 'Unable to load jobs'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const isJobExternal = (value) => value === true || value === 'true' || value === 1;
+
+  const loadLeaderboard = async (jobId) => {
+    setLoadingLeaderboardJobId(jobId);
+    setError('');
+    try {
+      const { data } = await api.get(`/admin/jobs/${jobId}/leaderboard`);
+      setLeaderboardByJob((prev) => ({ ...prev, [jobId]: data }));
+    } catch (err) {
+      setError(apiError(err, 'Unable to load leaderboard'));
+    } finally {
+      setLoadingLeaderboardJobId(null);
     }
   };
 
@@ -258,6 +275,51 @@ function ManageJobs() {
                   <a href={job.apply_url} target="_blank" rel="noreferrer" className="admin-job-link">
                     Apply Link ↗
                   </a>
+                )}
+
+                {!isJobExternal(job.is_external) ? (
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <button
+                      className="btn ghost small"
+                      onClick={() => loadLeaderboard(job.id)}
+                      disabled={loadingLeaderboardJobId === job.id}
+                    >
+                      {loadingLeaderboardJobId === job.id ? 'Loading Leaderboard...' : 'View Leaderboard'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: '0.6rem' }}>
+                    Leaderboard not available for external jobs.
+                  </div>
+                )}
+
+                {leaderboardByJob[job.id]?.entries && (
+                  <div style={{ marginTop: '0.7rem', overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', padding: '0.35rem', borderBottom: '1px solid #dbe2ef' }}>Rank</th>
+                          <th style={{ textAlign: 'left', padding: '0.35rem', borderBottom: '1px solid #dbe2ef' }}>Name</th>
+                          <th style={{ textAlign: 'left', padding: '0.35rem', borderBottom: '1px solid #dbe2ef' }}>Email</th>
+                          <th style={{ textAlign: 'left', padding: '0.35rem', borderBottom: '1px solid #dbe2ef' }}>Score</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaderboardByJob[job.id].entries.length > 0 ? leaderboardByJob[job.id].entries.map((entry) => (
+                          <tr key={`${job.id}-${entry.user_id}-${entry.rank}`}>
+                            <td style={{ padding: '0.35rem', borderBottom: '1px solid #edf1f8' }}>{entry.rank}</td>
+                            <td style={{ padding: '0.35rem', borderBottom: '1px solid #edf1f8' }}>{entry.name || '-'}</td>
+                            <td style={{ padding: '0.35rem', borderBottom: '1px solid #edf1f8' }}>{entry.email || '-'}</td>
+                            <td style={{ padding: '0.35rem', borderBottom: '1px solid #edf1f8' }}>{entry.total_score ?? 0}</td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={4} style={{ padding: '0.45rem' }}>No leaderboard entries yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
               <button className="btn danger small" onClick={() => handleDeleteJob(job.id)}>

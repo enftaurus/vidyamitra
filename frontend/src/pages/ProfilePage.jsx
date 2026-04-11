@@ -113,6 +113,7 @@ export default function ProfilePage() {
     const candidates = toObject(row?.candidates) || {};
     const resumeJson = toObject(candidates?.resume_json) || toObject(row?.resume_json) || {};
     const basicInfo = toObject(row?.basic_information) || toObject(row?.basic_info) || {};
+    const codingProfilesObj = toObject(row?.coding_profiles) || toObject(resumeJson?.coding_profile_usernames) || {};
     const searchableObjects = collectObjects({ ...row, candidates, resumeJson, basicInfo });
 
     return {
@@ -124,6 +125,12 @@ export default function ProfilePage() {
       projects: normalizeArray(row, ['projects']),
       education: normalizeArray(row, ['education']),
       certifications: normalizeArray(row, ['certificates', 'certifications']),
+      codingProfiles: {
+        leetcode: readValue(codingProfilesObj, ['leetcode', 'leetcode_username']),
+        codeforces: readValue(codingProfilesObj, ['codeforces', 'codeforces_username']),
+        codechef: readValue(codingProfilesObj, ['codechef', 'codechef_username']),
+        github: readValue(codingProfilesObj, ['github', 'github_username']),
+      },
     };
   }, [profileRaw]);
 
@@ -162,6 +169,16 @@ export default function ProfilePage() {
                   : String(skill);
                 return <span className="pill" key={`skill-${index}`}>{formatValue(skillText)}</span>;
               }) : <span>-</span>}
+            </div>
+          </article>
+
+          <article className="profile-card">
+            <h3>Coding Profiles</h3>
+            <div className="kv-grid">
+              <div><strong>LeetCode:</strong> {formatValue(profile.codingProfiles.leetcode)}</div>
+              <div><strong>Codeforces:</strong> {formatValue(profile.codingProfiles.codeforces)}</div>
+              <div><strong>CodeChef:</strong> {formatValue(profile.codingProfiles.codechef)}</div>
+              <div><strong>GitHub:</strong> {formatValue(profile.codingProfiles.github)}</div>
             </div>
           </article>
 
