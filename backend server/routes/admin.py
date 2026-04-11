@@ -6,6 +6,42 @@ from services.db_client import supabase
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def _get_saved_coding_profiles(user_id: int) -> dict:
+    try:
+        response = (
+            supabase
+            .table("coding_profiles")
+            .select("leetcode_username,codeforces_username,codechef_username,github_username")
+            .eq("user_id", user_id)
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        if not rows:
+            return {
+                "leetcode": None,
+                "codeforces": None,
+                "codechef": None,
+                "github": None,
+            }
+
+        row = rows[0]
+        return {
+            "leetcode": row.get("leetcode_username"),
+            "codeforces": row.get("codeforces_username"),
+            "codechef": row.get("codechef_username"),
+            "github": row.get("github_username"),
+        }
+    except Exception:
+        return {
+            "leetcode": None,
+            "codeforces": None,
+            "codechef": None,
+            "github": None,
+        }
+
+
 class JobCreate(BaseModel):
     title: str
     company: str
@@ -85,7 +121,15 @@ def get_user_profile(user_id: int):
         ).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="User not found")
-        return {"success": True, "data": response.data}
+
+        saved_profiles = _get_saved_coding_profiles(user_id)
+        data = response.data
+        if isinstance(data, list) and data and isinstance(data[0], dict):
+            data[0]["coding_profiles"] = saved_profiles
+        elif isinstance(data, dict):
+            data["coding_profiles"] = saved_profiles
+
+        return {"success": True, "data": data}
     except HTTPException:
         raise
     except Exception as e:
@@ -109,5 +153,82 @@ def delete_job(job_id: int):
     try:
         response = supabase.table("jobs").delete().eq("id", job_id).execute()
         return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/jobs/{job_id}/leaderboard")
+def job_leaderboard(job_id: int):
+    """Return leaderboard entries for a Vidyamitra-posted job (non-external only)."""
+    try:
+        job_resp = (
+            supabase
+            .table("jobs")
+            .select("id,is_external,title,company")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        )
+        if not job_resp.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        job = job_resp.data[0]
+        is_external = job.get("is_external") in (True, "true", 1)
+        if is_external:
+            raise HTTPException(status_code=400, detail="Leaderboard is available only for Vidyamitra-posted jobs")
+
+        board_resp = (
+            supabase
+            .table("leaderboard")
+            .select("user_id,score")
+            .eq("job_id", job_id)
+            .order("score", desc=True)
+            .execute()
+        )
+        rows = board_resp.data or []
+
+        result = []
+        for index, row in enumerate(rows, start=1):
+            user_id = int(row.get("user_id")) if row.get("user_id") is not None else None
+            user_name = "Unknown"
+            user_email = ""
+
+            if user_id is not None:
+                try:
+                    user_resp = (
+                        supabase
+                        .table("users")
+                        .select("id,name,email")
+                        .eq("id", user_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if user_resp.data:
+                        user_name = user_resp.data[0].get("name") or "Unknown"
+                        user_email = user_resp.data[0].get("email") or ""
+                except Exception:
+                    pass
+
+            result.append(
+                {
+                    "rank": index,
+                    "user_id": user_id,
+                    "name": user_name,
+                    "email": user_email,
+                    "total_score": int(row.get("score") or 0),
+                }
+            )
+
+        return {
+            "success": True,
+            "job": {
+                "id": job.get("id"),
+                "title": job.get("title"),
+                "company": job.get("company"),
+            },
+            "entries": result,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

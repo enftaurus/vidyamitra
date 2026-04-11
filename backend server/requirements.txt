@@ -4,6 +4,7 @@ langchain
 langchain-core
 langchain-experimental
 langchain-google-genai
+langchain-groq
 langgraph
 google-generativeai
 requests
@@ -12,6 +13,7 @@ supabase
 python-dotenv
 pydantic
 langchain-google-genai
+langchain-groq
 email-validator
 python-multipart
 langchain-community

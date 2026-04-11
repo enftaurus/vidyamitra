@@ -22,6 +22,7 @@ class InterviewState(TypedDict):
     analysis: Optional[final_analysis]
     current_answer: str
     core_topic_questions_asked: int
+    job_context: str
 class questions(BaseModel):
     question:str=Field(...,description="The question to be asked in the technical round depending on the previous responses")
 class answers(BaseModel):

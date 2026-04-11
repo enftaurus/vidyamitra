@@ -48,35 +48,26 @@ def reset_flow_state(user_id: str) -> dict:
     return state
 
 
-def ensure_round_start_allowed(user_id: str, round_name: str) -> dict:
+def ensure_round_start_allowed(user_id: str, round_name: str) -> tuple[bool, str]:
     if round_name not in ROUND_ORDER:
-        raise HTTPException(status_code=400, detail="Invalid round")
+        return False, "Invalid round"
 
     state = get_flow_state(user_id)
     idx = ROUND_ORDER.index(round_name)
 
     for required in ROUND_ORDER[:idx]:
         if state.get(required) != "completed":
-            raise HTTPException(
-                status_code=403,
-                detail=f"Complete {required} round first.",
-            )
+            return False, f"Complete {required} round first."
 
     if state.get(round_name) == "completed":
-        raise HTTPException(
-            status_code=400,
-            detail=f"{round_name.capitalize()} round already completed.",
-        )
+        return False, f"{round_name.capitalize()} round already completed."
 
-    return state
+    return True, "Round can be started."
 
 
-def ensure_round_answer_allowed(user_id: str, round_name: str) -> dict:
+def ensure_round_answer_allowed(user_id: str, round_name: str) -> tuple[bool, str]:
     state = get_flow_state(user_id)
     status = state.get(round_name)
     if status not in ("in_progress", "completed"):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Start {round_name} round first.",
-        )
-    return state
+        return False, f"Start {round_name} round first."
+    return True, "Answer can be submitted."

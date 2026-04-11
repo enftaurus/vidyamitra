@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Request, HTTPException
 from services.db_client import supabase
 from models.domain_switch import DomainSwitchRequest, DomainSwitchAnalysis
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 import os
 
 router = APIRouter(prefix="/domain_switch", tags=["domain_switch"])
 
-api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2, api_key=api_key)
+api_key = os.getenv("GROQ_API_KEY")
+model = ChatGroq(temperature=0, model_name="llama-3.3-70b-versatile", groq_api_key=api_key)
 
 prompt = PromptTemplate(
     input_variables=["user_info_json", "target_domain"],
@@ -40,7 +40,7 @@ async def domain_switch(data: DomainSwitchRequest, request: Request):
         raise HTTPException(status_code=401, detail="User not logged in")
     try:
         if not api_key:
-            raise HTTPException(status_code=500, detail="RESUME_API is not configured")
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured")
 
         response = supabase.rpc("get_full_candidate_profile", {"p_user_id": int(user_id)}).execute()
         if not response.data:

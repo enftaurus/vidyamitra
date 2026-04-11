@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from services.round_flow import get_flow_state, reset_flow_state
+from services.job_context import clear_active_job
 
 router = APIRouter(prefix="/interview_flow", tags=["interview_flow"])
 
@@ -19,4 +20,6 @@ def reset_status(request: Request):
     if not user_id:
         raise HTTPException(status_code=401, detail="User not logged in")
 
+    clear_active_job(str(user_id))
     return {"status": reset_flow_state(str(user_id))}
+

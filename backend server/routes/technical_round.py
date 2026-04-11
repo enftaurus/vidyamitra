@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import HumanMessage
 from typing import Any
@@ -10,11 +10,12 @@ from services.db_client import supabase
 from services.leaderboard import record_round_score
 from services.redis import redis_client
 from services.round_flow import ensure_round_start_allowed, ensure_round_answer_allowed, set_round_state
+from services.job_context import get_active_job, format_job_context_for_prompt
 import os
 import json
 
-api_key = os.getenv("RESUME_API")
-model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=1.0, api_key=api_key)
+api_key = os.getenv("GROQ_API_KEY")
+model = ChatGroq(temperature=0.6, model_name="llama-3.3-70b-versatile", groq_api_key=api_key)
 structured_model = model.with_structured_output(model_result)
 _STATE_FALLBACK: dict[str, dict[str, Any]] = {}
 CORE_TOPICS = ["Computer Networks", "DBMS", "OOPS"]
@@ -108,14 +109,15 @@ def generate_question(state: InterviewState) -> InterviewState:
 
     if len(qa) >= MAX_QUESTIONS:
         state["next_question"] = (
-            "Thank you for completing the technical interview. "
-            f"We have reached the maximum of {MAX_QUESTIONS} questions, so this round is now concluded."
+            "Thank you for completing the technical interview! It was a pleasure interviewing you today. "
+            f"We have reached the maximum of {MAX_QUESTIONS} questions, so this round is now concluded. Best of luck!"
         )
         state["action"] = "end_interview"
         state["should_end"] = True
         return state
 
     if len(qa) == 0:
+        job_context_block = state.get("job_context", "")
         prompt = f"""
 You are a strict, high-pressure technical interviewer at a top product-based company.
 You are starting a structured technical mock interview.
@@ -124,6 +126,8 @@ Read it carefully and use it to guide your questioning strategy.
 ---------------------------
 CANDIDATE PROFILE:
 {candidate_profile}
+---------------------------
+{job_context_block}
 ---------------------------
 INSTRUCTIONS:
 0. You have up to {MAX_QUESTIONS} total questions in this technical round.
@@ -163,12 +167,16 @@ Generate:
         )
         forced_topic = CORE_TOPICS[core_topic_questions_asked % len(CORE_TOPICS)] if force_core_topic else ""
 
+        job_context_block = state.get("job_context", "")
+
         prompt = f"""
 You are a highly strict and critical technical interviewer at a top product-based company.
 You are conducting a structured technical mock interview.
 ==============================
 CANDIDATE PROFILE:
 {candidate_profile}
+==============================
+{job_context_block}
 ==============================
 PREVIOUS QUESTIONS AND ANSWERS:
 {qa}
@@ -274,13 +282,14 @@ def record_answer(state: InterviewState) -> InterviewState:
 # Node: final analysis after interview ends
 # ─────────────────────────────────────────────
 def analysis_of_interview(state: InterviewState) -> InterviewState:
-    analysis_model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash", temperature=1.0, api_key=api_key
+    analysis_model = ChatGroq(
+        model_name="llama-3.3-70b-versatile", temperature=0.1, groq_api_key=api_key
     )
     structured_analysis = analysis_model.with_structured_output(final_analysis)
 
     qa = state["questiions_and_answers"]
     candidate_profile = state["candidate_profile"]
+    job_context_block = state.get("job_context", "")
 
     prompt = f"""
 You are an expert technical interview evaluator.
@@ -289,6 +298,8 @@ Analyze the complete interview session below and produce a comprehensive final e
 ==============================
 CANDIDATE PROFILE:
 {candidate_profile}
+==============================
+{job_context_block}
 ==============================
 QUESTIONS AND ANSWERS:
 {qa}
@@ -388,7 +399,7 @@ async def start_interview(request: Request):
         ensure_round_start_allowed(str(user_id), "technical")
 
         if not api_key:
-            raise HTTPException(status_code=500, detail="RESUME_API is not configured")
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured")
 
         response = supabase.rpc(
             "get_full_candidate_profile", {"p_user_id": int(user_id)}
@@ -397,6 +408,9 @@ async def start_interview(request: Request):
             raise HTTPException(status_code=404, detail="User not found")
 
         candidate_profile = response.data
+
+        job = get_active_job(str(user_id))
+        job_context_block = format_job_context_for_prompt(job)
 
         initial_state: InterviewState = {
             "candidate_profile": candidate_profile,
@@ -407,6 +421,7 @@ async def start_interview(request: Request):
             "analysis": None,
             "current_answer": "",
             "core_topic_questions_asked": 0,
+            "job_context": job_context_block,
         }
 
         result_state = interview_graph.invoke(initial_state)
@@ -443,7 +458,7 @@ async def submit_answer(answer_payload: interview_answer_request, request: Reque
         ensure_round_answer_allowed(str(user_id), "technical")
 
         if not api_key:
-            raise HTTPException(status_code=500, detail="RESUME_API is not configured")
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured")
 
         answer = answer_payload.answer.strip()
         if not answer:

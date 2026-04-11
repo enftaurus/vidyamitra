@@ -1,14 +1,14 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import List, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
+from typing import Optional
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 from services.db_client import supabase
 import os, json, random
 
 router = APIRouter(prefix="/skill-quiz", tags=["skill-quiz"])
 
-api_key = os.getenv("RESUME_API")
+api_key = os.getenv("GROQ_API_KEY")
 
 # ───────────────────────────────────────────────────
 # Hardcoded question bank  –  keyed by skill (lower)
@@ -191,9 +191,21 @@ QUESTION_BANK = {
         {"question": "Docker Compose is used for:", "options": ["Building images", "Multi-container orchestration", "Monitoring", "Networking only"], "answer": "B"},
         {"question": "A Docker volume is for:", "options": ["Networking", "Persistent data storage", "CPU allocation", "Image layering"], "answer": "B"},
         {"question": "Which command runs a container?", "options": ["docker start", "docker run", "docker exec", "docker begin"], "answer": "B"},
-        {"question": "`EXPOSE` in Dockerfile:", "options": ["Opens a port on the host", "Documents which port the app listens on", "Blocks a port", "Creates a network"], "answer": "B"},
+        {"question": "`EXPOSE` in Dockerfile:", "options": ["Opens a port on the host", "Documents that the container listens on a port", "Starts a service", "Builds an image"], "answer": "B"},
         {"question": "Docker Hub is:", "options": ["A CI/CD tool", "A public image registry", "A monitoring tool", "An IDE"], "answer": "B"},
         {"question": "Difference between CMD and ENTRYPOINT:", "options": ["No difference", "CMD can be overridden, ENTRYPOINT is the fixed executable", "ENTRYPOINT can be overridden", "CMD runs first"], "answer": "B"},
+    ],
+    "competitive programming": [
+        {"question": "For n = 100000, which time complexity is usually acceptable?", "options": ["O(n^2)", "O(n log n)", "O(2^n)", "O(n!)"], "answer": "B"},
+        {"question": "In an unweighted graph, shortest path is found using:", "options": ["DFS", "BFS", "Dijkstra", "Floyd-Warshall"], "answer": "B"},
+        {"question": "Prefix sums allow range-sum queries in:", "options": ["O(n)", "O(log n)", "O(1)", "O(n log n)"], "answer": "C"},
+        {"question": "`lower_bound` returns:", "options": ["Last element <= x", "First element > x", "First element >= x", "Index of exact x only"], "answer": "C"},
+        {"question": "Which structure supports point update and range query in O(log n)?", "options": ["Queue", "Segment Tree", "Stack", "Trie"], "answer": "B"},
+        {"question": "Disjoint Set Union (DSU) is mainly used for:", "options": ["String matching", "Connectivity and union-find", "Topological sort", "Shortest paths with negative edges"], "answer": "B"},
+        {"question": "Bitmasking is most useful when working with:", "options": ["Floating points", "Subsets/states", "File I/O", "Database joins"], "answer": "B"},
+        {"question": "Two-pointer technique is commonly applied on:", "options": ["Sorted arrays/strings", "Binary trees only", "Hash maps only", "Stacks only"], "answer": "A"},
+        {"question": "Why is 1e9+7 frequently used in CP?", "options": ["It is always the fastest", "It is a large prime useful for modulo arithmetic", "It avoids recursion", "It improves memory"], "answer": "B"},
+        {"question": "Main purpose of fast I/O in CP is to:", "options": ["Improve algorithm complexity", "Reduce read/write overhead on large input", "Avoid sorting", "Replace data structures"], "answer": "B"},
     ],
 }
 
@@ -213,6 +225,16 @@ SKILL_ALIASES = {
     "tailwind": "css", "bootstrap": "css",
     "github": "git", "gitlab": "git", "version control": "git",
     "containers": "docker", "kubernetes": "docker",
+    "data structures and algorithms": "data structures",
+    "problem solving": "competitive programming",
+    "cp": "competitive programming",
+    "competitive programming": "competitive programming",
+    "leetcode": "competitive programming",
+    "codeforces": "competitive programming",
+    "codechef": "competitive programming",
+    "atcoder": "competitive programming",
+    "hackerrank": "competitive programming",
+    "hackerearth": "competitive programming",
 }
 
 FALLBACK_SKILLS = ["python", "javascript", "sql", "data structures"]
@@ -257,10 +279,18 @@ def _pick_questions(skills: list[str], count: int = 10) -> list[dict]:
     return pool[:count]
 
 
-# ── GET /skill-quiz/questions/{user_id} ──
-@router.get("/questions/{user_id}")
-def get_quiz_questions(user_id: int):
+# ── GET /skill-quiz/questions ──
+@router.get("/questions")
+def get_quiz_questions(request: Request):
     """Fetch user skills and return 10 MCQ questions."""
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not logged in")
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid user session")
+
     try:
         profile_resp = supabase.rpc(
             "get_full_candidate_profile", {"p_user_id": user_id}
@@ -306,14 +336,18 @@ def get_quiz_questions(user_id: int):
 
 # ── POST /skill-quiz/evaluate ──
 class QuizSubmission(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None
     questions: list[dict]  # [{id, skill, question, options, user_answer}]
     answer_key: dict        # {"1": "B", "2": "A", ...}
 
 
 @router.post("/evaluate")
-def evaluate_quiz(payload: QuizSubmission):
+def evaluate_quiz(payload: QuizSubmission, request: Request):
     """Score the quiz and get AI analysis."""
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not logged in")
+
     # 1. Score
     total = len(payload.questions)
     correct = 0
@@ -340,8 +374,8 @@ def evaluate_quiz(payload: QuizSubmission):
 
     # 2. AI analysis via Gemini
     try:
-        model = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash", temperature=0.7, api_key=api_key
+        model = ChatGroq(
+            model_name="llama-3.3-70b-versatile", temperature=0.7, groq_api_key=api_key
         )
 
         qa_text = ""

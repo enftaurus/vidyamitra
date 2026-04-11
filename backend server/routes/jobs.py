@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 import json
 import os
@@ -8,6 +8,8 @@ import html
 
 from services.db_client import supabase
 from services.leaderboard import register_quick_apply
+from services.job_context import set_active_job
+from services.round_flow import reset_flow_state
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -301,7 +303,7 @@ def quick_apply(payload: QuickApplyPayload, request: Request):
 		job_resp = (
 			supabase
 			.table("jobs")
-			.select("id")
+			.select("*")
 			.eq("id", payload.job_id)
 			.limit(1)
 			.execute()
@@ -310,8 +312,23 @@ def quick_apply(payload: QuickApplyPayload, request: Request):
 		if not job_resp.data:
 			raise HTTPException(status_code=404, detail="Job not found")
 
+		job = job_resp.data[0]
+
 		register_quick_apply(int(user_id), int(payload.job_id))
-		return {"success": True, "job_id": int(payload.job_id)}
+		set_active_job(str(user_id), job)
+		reset_flow_state(str(user_id))
+
+		return {
+			"success": True,
+			"job_id": int(payload.job_id),
+			"job": {
+				"id": job.get("id"),
+				"title": job.get("title"),
+				"company": job.get("company"),
+				"location": job.get("location"),
+				"description": job.get("description"),
+			},
+		}
 	except HTTPException:
 		raise
 	except Exception as e:
@@ -324,9 +341,9 @@ def build_job_resume(payload: JobResumePayload, request: Request):
 	if not user_id:
 		raise HTTPException(status_code=401, detail="User not logged in")
 
-	api_key = os.getenv("RESUME_API") or os.getenv("GOOGLE_API_KEY")
+	api_key = os.getenv("GROQ_API_KEY")
 	if not api_key:
-		raise HTTPException(status_code=500, detail="Resume model API key is not configured")
+		raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured")
 
 	try:
 		job_resp = (
@@ -350,10 +367,10 @@ def build_job_resume(payload: JobResumePayload, request: Request):
 
 		profile = profile_resp.data[0] if isinstance(profile_resp.data, list) else profile_resp.data
 
-		model = ChatGoogleGenerativeAI(
-			model="gemini-2.5-flash",
+		model = ChatGroq(
+			model_name="llama-3.3-70b-versatile",
 			temperature=0.1,
-			google_api_key=api_key,
+			groq_api_key=api_key,
 		)
 		structured_model = model.with_structured_output(TailoredResumeOutput)
 

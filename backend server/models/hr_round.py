@@ -24,6 +24,7 @@ class HRInterviewState(TypedDict):
     action: Literal["increase_difficulty", "decrease_difficulty", "keep_difficulty", "end_interview"]
     analysis: Optional[final_analysis]
     current_answer: str
+    job_context: str
 
 
 class hr_model_result(BaseModel):
