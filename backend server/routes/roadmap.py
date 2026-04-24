@@ -42,9 +42,14 @@ class RoadmapNode(BaseModel):
         default_factory=list,
         description=(
             "List of 1-3 concrete learning resources for this node. "
-            "Format as search queries or platform suggestions, e.g. "
-            "'YouTube: FastAPI full course', 'Docs: docs.docker.com', 'Course: freeCodeCamp Python' "
-            "DO NOT make up URLs. Use searchable references only."
+            "ALWAYS prefix with one of these exact labels: "
+            "'YouTube: <search query>' for YouTube tutorials, "
+            "'Docs: <official docs name or URL>' for official documentation, "
+            "'Course: <platform and course name>' for online courses. "
+            "Examples: 'YouTube: Docker full course for beginners', "
+            "'Docs: docs.docker.com getting started', "
+            "'Course: freeCodeCamp Python full course'. "
+            "DO NOT make up full URLs. Use descriptive search queries only."
         )
     )
     estimated_time: Optional[str] = Field(

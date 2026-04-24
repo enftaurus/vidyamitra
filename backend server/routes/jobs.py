@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
@@ -10,11 +10,20 @@ from services.db_client import supabase
 from services.leaderboard import register_quick_apply
 from services.job_context import set_active_job
 from services.round_flow import reset_flow_state
+import services.queue_service as qs
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 class QuickApplyPayload(BaseModel):
+	job_id: int
+
+
+class AcknowledgePayload(BaseModel):
+	job_id: int
+
+
+class WithdrawPayload(BaseModel):
 	job_id: int
 
 
@@ -294,12 +303,27 @@ def get_jobs():
 
 
 @router.post("/quick-apply")
-def quick_apply(payload: QuickApplyPayload, request: Request):
+def quick_apply(
+	payload: QuickApplyPayload,
+	request: Request,
+	background_tasks: BackgroundTasks,
+):
+	"""
+	Apply to an internal VidyaMitra job.
+
+	Capacity check (ACID-safe via Redis lock):
+	  • ACTIVE + PENDING_ACK < no_of_people  →  status = ACTIVE,  interview unlocks.
+	  • Otherwise                             →  status = WAITLISTED, returns queue position.
+
+	A cascade_promotion BackgroundTask runs after every apply so lazy-decay
+	is triggered and any freed slots are filled automatically.
+	"""
 	user_id = request.cookies.get("user_id")
 	if not user_id:
 		raise HTTPException(status_code=401, detail="User not logged in")
 
 	try:
+		# ── Fetch job details ────────────────────────────────────────────────
 		job_resp = (
 			supabase
 			.table("jobs")
@@ -308,18 +332,53 @@ def quick_apply(payload: QuickApplyPayload, request: Request):
 			.limit(1)
 			.execute()
 		)
-
 		if not job_resp.data:
 			raise HTTPException(status_code=404, detail="Job not found")
 
 		job = job_resp.data[0]
 
+		# ── Queue logic (capacity check + insert + audit log) ────────────────
+		try:
+			queue_result = qs.apply_to_job(
+				job_id=int(payload.job_id),
+				user_id=int(user_id),
+				db=supabase,
+			)
+		except ValueError as ve:
+			raise HTTPException(status_code=409, detail=str(ve))
+		except RuntimeError as re:
+			raise HTTPException(status_code=503, detail=str(re))
+
+		status = queue_result["status"]
+
+		# ── If WAITLISTED: return queue info, do NOT unlock interview ────────
+		if status == "WAITLISTED":
+			# Run cascade in background to clean stale entries for this job
+			background_tasks.add_task(qs.cascade_promotion, int(payload.job_id), supabase)
+			return {
+				"success": True,
+				"waitlisted": True,
+				"job_id": int(payload.job_id),
+				"queue_position": queue_result["queue_position"],
+				"waitlist_total": queue_result["waitlist_total"],
+				"job": {
+					"id": job.get("id"),
+					"title": job.get("title"),
+					"company": job.get("company"),
+				},
+			}
+
+		# ── ACTIVE: unlock leaderboard, set context, proceed to interview ────
 		register_quick_apply(int(user_id), int(payload.job_id))
 		set_active_job(str(user_id), job)
 		reset_flow_state(str(user_id))
 
+		# Background cascade to handle any stale entries for this job
+		background_tasks.add_task(qs.cascade_promotion, int(payload.job_id), supabase)
+
 		return {
 			"success": True,
+			"waitlisted": False,
 			"job_id": int(payload.job_id),
 			"job": {
 				"id": job.get("id"),
@@ -328,6 +387,129 @@ def quick_apply(payload: QuickApplyPayload, request: Request):
 				"location": job.get("location"),
 				"description": job.get("description"),
 			},
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/acknowledge")
+def acknowledge_spot(
+	payload: AcknowledgePayload,
+	request: Request,
+	background_tasks: BackgroundTasks,
+):
+	"""
+	Confirm a promoted slot (PENDING_ACK → ACTIVE).
+
+	The user has 24 hours from their promotion timestamp to hit this endpoint.
+	Late calls are rejected (lazy decay will have already moved them back to
+	WAITLISTED or REJECTED).
+
+	On success, interview rounds are unlocked and the cascade runs in the
+	background in case other stale entries need flushing.
+	"""
+	user_id = request.cookies.get("user_id")
+	if not user_id:
+		raise HTTPException(status_code=401, detail="User not logged in")
+
+	try:
+		try:
+			result = qs.acknowledge_spot(
+				job_id=payload.job_id,
+				user_id=int(user_id),
+				db=supabase,
+			)
+		except ValueError as ve:
+			raise HTTPException(status_code=409, detail=str(ve))
+
+		# Fetch job details to set the active-job context
+		job_resp = (
+			supabase
+			.table("jobs")
+			.select("*")
+			.eq("id", payload.job_id)
+			.limit(1)
+			.execute()
+		)
+		if job_resp.data:
+			job = job_resp.data[0]
+			register_quick_apply(int(user_id), payload.job_id)
+			set_active_job(str(user_id), job)
+			reset_flow_state(str(user_id))
+
+		background_tasks.add_task(qs.cascade_promotion, payload.job_id, supabase)
+
+		return {
+			"success": True,
+			"message": "Spot confirmed! Interview rounds are now unlocked.",
+		}
+	except HTTPException:
+		raise
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{job_id}/my-status")
+def my_status(job_id: int, request: Request):
+	"""
+	Return the caller's current queue status for a specific job.
+
+	Always runs lazy decay first so the response reflects the real-time state
+	of the queue without needing a cron job.  The frontend uses this to:
+	  • Show the waitlist position badge
+	  • Drive the PENDING_ACK countdown timer
+	  • Trigger the red pulse badge on the Interview Hub nav item
+	"""
+	user_id = request.cookies.get("user_id")
+	if not user_id:
+		raise HTTPException(status_code=401, detail="User not logged in")
+
+	try:
+		position_data = qs.get_queue_position(
+			job_id=job_id,
+			user_id=int(user_id),
+			db=supabase,
+		)
+		return position_data
+	except Exception as e:
+		raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/withdraw")
+def withdraw(
+	payload: WithdrawPayload,
+	request: Request,
+	background_tasks: BackgroundTasks,
+):
+	"""
+	Withdraw from an active, waitlisted, or pending-ack application.
+
+	If the withdrawn entry held an ACTIVE or PENDING_ACK slot, a cascade runs
+	in the background to immediately promote the next waitlisted applicant.
+	"""
+	user_id = request.cookies.get("user_id")
+	if not user_id:
+		raise HTTPException(status_code=401, detail="User not logged in")
+
+	try:
+		try:
+			result = qs.withdraw_application(
+				job_id=payload.job_id,
+				user_id=int(user_id),
+				db=supabase,
+			)
+		except ValueError as ve:
+			raise HTTPException(status_code=409, detail=str(ve))
+
+		# If a real slot was freed, cascade immediately
+		if result.get("freed_slot"):
+			background_tasks.add_task(qs.cascade_promotion, payload.job_id, supabase)
+
+		return {
+			"success": True,
+			"message": "Application withdrawn successfully.",
 		}
 	except HTTPException:
 		raise

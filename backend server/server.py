@@ -9,7 +9,7 @@ from services.db_client import supabase
 
 from routes import login,register,logout,resume_upload,profile,domain_switch,technical_round,manager_round,hr_round,coding_round,interview_flow,proctoring,jobs,admin,skill_quiz,stt
 from routes import mock_technical, mock_manager, mock_hr
-from routes import roadmap
+from routes import roadmap, chat
 
 app=FastAPI()
 allowed_origins = [
@@ -61,6 +61,7 @@ app.include_router(mock_manager.router)
 app.include_router(mock_hr.router)
 app.include_router(roadmap.router)
 app.include_router(stt.router)
+app.include_router(chat.router)
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the VidyaMitra API!"}
